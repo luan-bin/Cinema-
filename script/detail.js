@@ -305,7 +305,10 @@ function renderHero(movie, credits) {
     <p class="detail-hero-overview">${movie.overview || "Chưa có mô tả tiếng Việt."}</p>
 
     <div class="detail-hero-actions">
-      <button class="btn-primary" id="heroTrailerBtn" style="display:none">
+      <a class="btn-primary" href="watch.html?id=${movie.id}">
+        <i class="fas fa-play"></i> Xem Phim
+      </a>
+      <button class="btn-primary" id="heroTrailerBtn" style="display:none;background:rgba(255,255,255,0.12);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.2);">
         <i class="fab fa-youtube"></i> Xem Trailer
       </button>
       <button class="btn-secondary" onclick="scrollToTab('overview')">

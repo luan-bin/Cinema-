@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════
-   CINEVERSE — script.js
+   CINEVERSE — home.js
    TMDB API Integration + All Interactions
 ══════════════════════════════════════════════ */
 
@@ -38,7 +38,7 @@ async function tmdb(endpoint, params = {}) {
   }
 }
 
-// Poster helper
+// Helpers
 const poster = (path, size = CONFIG.POSTER_W) =>
   path ? `${CONFIG.IMG_BASE}/${size}${path}` : "https://via.placeholder.com/342x513/161616/888?text=No+Image";
 
@@ -51,6 +51,15 @@ const stars = (rating) => {
   const n = Math.round(rating / 2);
   return "★".repeat(n) + "☆".repeat(5 - n);
 };
+
+// ── Navigate to detail page ──────────────────
+function goToDetail(movieId) {
+  window.location.href = `detail.html?id=${movieId}`;
+}
+
+function escapeTitle(title) {
+  return (title || "").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+}
 
 // ══════════════════════════════════════════════
 //  NAVBAR
@@ -123,18 +132,15 @@ function initNavbar() {
 //  AUTH — Kết nối Navbar với CinemaAuth
 // ══════════════════════════════════════════════
 function initAuthNavbar() {
-  // Nếu không có CinemaAuth → giữ giao diện mặc định (guest)
   if (!window.CinemaAuth) return;
 
   const session = CinemaAuth.getSession();
 
   if (session && CinemaAuth.isLoggedIn()) {
-    // ── Đã đăng nhập ──
     const { firstName, lastName, email } = session.user;
     const fullName = `${firstName} ${lastName}`;
     const initials = `${firstName[0]}${lastName[0]}`.toUpperCase();
 
-    // Cập nhật avatar — dùng initials thay placeholder
     const avatarBtn = document.getElementById("userAvatarBtn");
     avatarBtn.innerHTML = `
       <div style="
@@ -147,11 +153,9 @@ function initAuthNavbar() {
       ">${initials}</div>
     `;
 
-    // Cập nhật thông tin trong user menu
     document.querySelector(".user-name").textContent = fullName;
     document.querySelector(".user-email").textContent = email;
 
-    // Nút logout hoạt động thật
     document.querySelector(".logout-link").addEventListener("click", (e) => {
       e.preventDefault();
       CinemaAuth.logout();
@@ -160,11 +164,9 @@ function initAuthNavbar() {
     });
 
   } else {
-    // ── Chưa đăng nhập → đổi user menu thành nút login/register ──
     document.querySelector(".user-name").textContent = "Khách";
     document.querySelector(".user-email").textContent = "Chưa đăng nhập";
 
-    // Thay danh sách menu
     document.querySelector(".user-menu-list").innerHTML = `
       <li>
         <a href="login.html" style="color: var(--red) !important;">
@@ -177,16 +179,6 @@ function initAuthNavbar() {
         </a>
       </li>
     `;
-
-    // Khi click vào các tính năng cần auth → redirect login
-    document.querySelectorAll("[onclick*='toggleWatchlist'], [onclick*='toggleFavorite']")
-      .forEach(el => {
-        el.addEventListener("click", (e) => {
-          e.stopImmediatePropagation();
-          showToast("Vui lòng đăng nhập để sử dụng tính năng này");
-          setTimeout(() => { window.location.href = "login.html"; }, 1500);
-        }, true);
-      });
   }
 }
 
@@ -227,8 +219,9 @@ async function performSearch(query) {
     return;
   }
 
+  // ── Bấm vào kết quả search → sang detail.html ──
   results.innerHTML = data.results.slice(0, 7).map((m) => `
-    <div class="search-result-item" onclick="openModal(${m.id})">
+    <div class="search-result-item" onclick="goToDetail(${m.id})">
       <img src="${poster(m.poster_path, 'w92')}" alt="${m.title}" />
       <div class="search-result-info">
         <p>${m.title}</p>
@@ -296,7 +289,7 @@ function renderHeroSlides() {
         </div>
         <p class="hero-overview">${m.overview || "Không có mô tả."}</p>
         <div class="hero-actions">
-          <button class="btn-primary" onclick="openModal(${m.id})">
+          <button class="btn-primary" onclick="goToDetail(${m.id})">
             <i class="fas fa-play"></i> Xem Chi Tiết
           </button>
           <button class="btn-secondary" onclick="toggleWatchlist(${m.id}, '${escapeTitle(m.title)}')">
@@ -311,7 +304,6 @@ function renderHeroSlides() {
     <div class="hero-dot ${i === 0 ? "active" : ""}" onclick="goToSlide(${i})"></div>
   `).join("");
 
-  // Controls
   document.getElementById("heroPrev").onclick = () => goToSlide((state.heroIndex - 1 + state.heroMovies.length) % state.heroMovies.length);
   document.getElementById("heroNext").onclick = () => goToSlide((state.heroIndex + 1) % state.heroMovies.length);
 }
@@ -344,11 +336,10 @@ async function loadTicker() {
   if (!data) return;
   const track = document.getElementById("tickerTrack");
   const items = data.results.map((m) => `
-    <div class="ticker-item">
+    <div class="ticker-item" onclick="goToDetail(${m.id})" style="cursor:pointer">
       <span>${m.vote_average.toFixed(1)} ⭐</span> ${m.title}
     </div>
   `).join("");
-  // Duplicate for seamless loop
   track.innerHTML = items + items;
 }
 
@@ -389,7 +380,7 @@ async function loadUpcoming() {
   if (!data) return;
   const container = document.getElementById("upcomingList");
   container.innerHTML = data.results.slice(0, 8).map((m) => `
-    <div class="upcoming-card" onclick="openModal(${m.id})">
+    <div class="upcoming-card" onclick="goToDetail(${m.id})">
       <img src="${poster(m.poster_path, 'w92')}" alt="${m.title}" />
       <div class="upcoming-info">
         <p class="upcoming-title">${m.title}</p>
@@ -408,7 +399,7 @@ async function loadTopRated() {
   if (!data) return;
   const grid = document.getElementById("topRatedGrid");
   grid.innerHTML = data.results.slice(0, 10).map((m, i) => `
-    <div class="top-rated-card" onclick="openModal(${m.id})">
+    <div class="top-rated-card" onclick="goToDetail(${m.id})">
       <img src="${backdrop(m.backdrop_path) || poster(m.poster_path)}" alt="${m.title}" />
       <div class="top-rated-overlay">
         <span class="top-rated-rank">${String(i + 1).padStart(2, "0")}</span>
@@ -425,7 +416,7 @@ async function loadTopRated() {
 function renderMovieCards(container, movies) {
   if (!container) return;
   container.innerHTML = movies.map((m) => `
-    <div class="movie-card" onclick="openModal(${m.id})">
+    <div class="movie-card" onclick="goToDetail(${m.id})">
       <div class="movie-poster">
         <img
           src="${poster(m.poster_path)}"
@@ -456,83 +447,6 @@ function showSkeletons(containerId, count = 6) {
     `<div class="skeleton skeleton-card"></div>`
   ).join("");
 }
-
-// ══════════════════════════════════════════════
-//  MOVIE MODAL
-// ══════════════════════════════════════════════
-async function openModal(movieId) {
-  const overlay = document.getElementById("modalOverlay");
-  const content = document.getElementById("modalContent");
-
-  overlay.classList.add("open");
-  document.body.style.overflow = "hidden";
-
-  content.innerHTML = `<div style="padding:60px;text-align:center;color:var(--grey)"><i class="fas fa-spinner fa-spin fa-2x"></i></div>`;
-
-  const [movie, credits, videos] = await Promise.all([
-    tmdb(`/movie/${movieId}`),
-    tmdb(`/movie/${movieId}/credits`),
-    tmdb(`/movie/${movieId}/videos`),
-  ]);
-
-  if (!movie) {
-    content.innerHTML = `<div style="padding:40px;text-align:center">Không tải được thông tin phim.</div>`;
-    return;
-  }
-
-  const director = credits?.crew?.find((c) => c.job === "Director");
-  const cast = credits?.cast?.slice(0, 5).map((a) => a.name).join(", ");
-  const trailer = videos?.results?.find((v) => v.type === "Trailer" && v.site === "YouTube");
-  const genres = movie.genres?.map((g) => g.name).join(" · ") || "N/A";
-  const inWatchlist = state.watchlist.includes(movieId);
-  const inFavorites = state.favorites.includes(movieId);
-
-  content.innerHTML = `
-    <div class="modal-hero">
-      <img src="${backdrop(movie.backdrop_path) || poster(movie.poster_path, 'w780')}" alt="${movie.title}" />
-    </div>
-    <div class="modal-body">
-      <h2 class="modal-title">${movie.title}</h2>
-      ${movie.tagline ? `<p style="color:var(--grey);font-style:italic;margin-bottom:12px">"${movie.tagline}"</p>` : ""}
-      <div class="modal-meta">
-        <span class="rating">⭐ ${movie.vote_average.toFixed(1)} <span style="color:var(--grey);font-weight:400">(${movie.vote_count.toLocaleString()})</span></span>
-        <span><i class="fas fa-calendar"></i> ${formatDate(movie.release_date)}</span>
-        <span><i class="fas fa-clock"></i> ${movie.runtime ? `${movie.runtime} phút` : "N/A"}</span>
-        <span><i class="fas fa-film"></i> ${genres}</span>
-        ${director ? `<span><i class="fas fa-clapperboard"></i> ${director.name}</span>` : ""}
-      </div>
-      ${cast ? `<p style="font-size:12px;color:var(--grey);margin-bottom:14px"><b style="color:var(--grey-light)">Diễn viên:</b> ${cast}</p>` : ""}
-      <p class="modal-overview">${movie.overview || "Chưa có mô tả tiếng Việt."}</p>
-      <div class="modal-actions">
-        ${trailer ? `
-          <a class="btn-primary" href="https://www.youtube.com/watch?v=${trailer.key}" target="_blank">
-            <i class="fab fa-youtube"></i> Xem Trailer
-          </a>` : ""}
-        <button class="btn-secondary" onclick="toggleWatchlist(${movie.id}, '${escapeTitle(movie.title)}')">
-          <i class="fas fa-bookmark${inWatchlist ? " active-icon" : ""}"></i>
-          ${inWatchlist ? "Đã Lưu" : "Xem Sau"}
-        </button>
-        <button class="btn-secondary" onclick="toggleFavorite(${movie.id}, '${escapeTitle(movie.title)}')">
-          <i class="fas fa-heart${inFavorites ? " active-icon" : ""}"></i>
-          ${inFavorites ? "Đã Thích" : "Yêu Thích"}
-        </button>
-      </div>
-    </div>
-  `;
-}
-
-function closeModal() {
-  document.getElementById("modalOverlay").classList.remove("open");
-  document.body.style.overflow = "";
-}
-
-document.getElementById("modalClose").addEventListener("click", closeModal);
-document.getElementById("modalOverlay").addEventListener("click", (e) => {
-  if (e.target === e.currentTarget) closeModal();
-});
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeModal();
-});
 
 // ══════════════════════════════════════════════
 //  WATCHLIST & FAVORITES
@@ -585,10 +499,6 @@ function formatDate(dateStr) {
   } catch { return dateStr; }
 }
 
-function escapeTitle(title) {
-  return (title || "").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-}
-
 // ══════════════════════════════════════════════
 //  SCROLL ANIMATION (Intersection Observer)
 // ══════════════════════════════════════════════
@@ -603,7 +513,6 @@ function initScrollAnimations() {
     });
   }, { threshold: 0.1, rootMargin: "0px 0px -40px 0px" });
 
-  // Observe section headers
   document.querySelectorAll(".section-header, .promo-banner, .ticker-wrap").forEach((el) => {
     el.style.opacity = "0";
     el.style.transform = "translateY(24px)";
@@ -612,12 +521,10 @@ function initScrollAnimations() {
   });
 }
 
-// Cards animation after data loads
 function observeCards(containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;
-  const cards = container.children;
-  Array.from(cards).forEach((card, i) => {
+  Array.from(container.children).forEach((card, i) => {
     card.style.opacity = "0";
     card.style.transform = "translateY(20px)";
     card.style.transition = `opacity 0.4s ease ${i * 0.06}s, transform 0.4s ease ${i * 0.06}s`;
@@ -637,12 +544,10 @@ async function init() {
   initSearch();
   initScrollAnimations();
 
-  // Show skeletons immediately
   showSkeletons("nowPlayingRow", 8);
   showSkeletons("popularGrid", 12);
   showSkeletons("topRatedGrid", 10);
 
-  // Load all data in parallel
   await Promise.all([
     loadGenres(),
     loadHero(),
