@@ -1,70 +1,22 @@
 /* ══════════════════════════════════════════════
    ECLIPSE CINEMA — watch.js
-   Watch Page — Full Logic
+   Phụ thuộc: config.js (load trước trong HTML)
 ══════════════════════════════════════════════ */
 
-// ─── CONFIG ───────────────────────────────────
-const CONFIG = {
-  API_KEY:    "ef29fa7a978b4e6593665f37c7b9110c",   // ← Thay bằng API key của bạn
-  BASE_URL:   "https://api.themoviedb.org/3",
-  IMG_BASE:   "https://image.tmdb.org/t/p",
-  POSTER_W:   "w342",
-  BACKDROP_W: "w1280",
-  LANG:       "vi-VN",
-};
-
-// Embed servers — thêm/bớt thoải mái
-const SERVERS = [
-  { name: "Server 1",   icon: "fa-circle-play",  url: (id) => `https://www.2embed.cc/embed/${id}` },
-  { name: "Server 2",   icon: "fa-circle-play",  url: (id) => `https://vidsrc.to/embed/movie/${id}` },
-  { name: "Server 3",   icon: "fa-circle-play",  url: (id) => `https://multiembed.mov/?video_id=${id}&tmdb=1` },
-];
+// Alias
+const tmdb   = tmdbFetch;
+const poster = posterUrl;
+const year   = releaseYear;
 
 // ─── STATE ────────────────────────────────────
 const state = {
-  movieId:       null,
-  movie:         null,
-  activeServer:  0,
-  playing:       false,
-  watchlist:     JSON.parse(localStorage.getItem("cineverse_watchlist") || "[]"),
-  favorites:     JSON.parse(localStorage.getItem("cineverse_favorites") || "[]"),
+  movieId:      null,
+  movie:        null,
+  activeServer: 0,
+  playing:      false,
+  watchlist:    Storage.get("cineverse_watchlist"),
+  favorites:    Storage.get("cineverse_favorites"),
 };
-
-// ─── HELPERS ──────────────────────────────────
-async function tmdb(endpoint, params = {}) {
-  const url = new URL(`${CONFIG.BASE_URL}${endpoint}`);
-  url.searchParams.set("api_key", CONFIG.API_KEY);
-  url.searchParams.set("language", CONFIG.LANG);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
-  } catch (err) { console.error("TMDB:", err); return null; }
-}
-
-const poster   = (p, s = CONFIG.POSTER_W) => p ? `${CONFIG.IMG_BASE}/${s}${p}` : `https://via.placeholder.com/342x513/161616/888?text=N%2FA`;
-const year     = (d) => d ? d.slice(0, 4) : "N/A";
-const runtime  = (m) => { if (!m) return "N/A"; const h = Math.floor(m/60), mn = m%60; return h ? `${h}g ${mn}p` : `${mn}p`; };
-const escTitle = (t) => (t || "").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-
-function formatDate(d) {
-  if (!d) return "N/A";
-  return new Date(d).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
-}
-
-function timeAgo(ts) {
-  const diff = Date.now() - ts;
-  const periods = [
-    [365*24*60*60*1000, "năm"], [30*24*60*60*1000, "tháng"],
-    [7*24*60*60*1000,   "tuần"], [24*60*60*1000,   "ngày"],
-    [60*60*1000, "giờ"],         [60*1000,          "phút"],
-  ];
-  for (const [ms, label] of periods) {
-    if (diff >= ms) { const n = Math.floor(diff/ms); return `${n} ${label} trước`; }
-  }
-  return "Vừa xong";
-}
 
 // ══════════════════════════════════════════════
 //  NAVBAR
@@ -85,7 +37,7 @@ function initNavbar() {
     hamburger.querySelectorAll("span").forEach((s, i) => {
       if (open) {
         if (i === 0) s.style.transform = "translateY(7px) rotate(45deg)";
-        if (i === 1) s.style.opacity = "0";
+        if (i === 1) s.style.opacity   = "0";
         if (i === 2) s.style.transform = "translateY(-7px) rotate(-45deg)";
       } else { s.style.transform = ""; s.style.opacity = ""; }
     });
@@ -102,9 +54,9 @@ function initNavbar() {
 //  SEARCH
 // ══════════════════════════════════════════════
 function initSearch() {
-  const btn    = document.getElementById("searchBtn");
-  const input  = document.getElementById("searchInput");
-  const results= document.getElementById("searchResults");
+  const btn     = document.getElementById("searchBtn");
+  const input   = document.getElementById("searchInput");
+  const results = document.getElementById("searchResults");
   let timer;
 
   btn.addEventListener("click", (e) => {
@@ -112,9 +64,9 @@ function initSearch() {
     input.classList.toggle("open");
     if (input.classList.contains("open")) input.focus();
   });
-  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => doSearch(input.value.trim()), 400); });
-  input.addEventListener("click", (e) => e.stopPropagation());
-  results.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("input",   () => { clearTimeout(timer); timer = setTimeout(() => doSearch(input.value.trim()), 400); });
+  input.addEventListener("click",    (e) => e.stopPropagation());
+  results.addEventListener("click",  (e) => e.stopPropagation());
 }
 
 async function doSearch(q) {
@@ -134,12 +86,11 @@ async function doSearch(q) {
         <p>${m.title}</p>
         <span>${year(m.release_date)} &nbsp;⭐ ${m.vote_average.toFixed(1)}</span>
       </div>
-    </div>
-  `).join("");
+    </div>`).join("");
 }
 
 // ══════════════════════════════════════════════
-//  GENRES DROPDOWN
+//  GENRES
 // ══════════════════════════════════════════════
 async function loadGenres() {
   const data = await tmdb("/genre/movie/list");
@@ -153,40 +104,32 @@ async function loadGenres() {
 //  PLAYER
 // ══════════════════════════════════════════════
 function buildServerBtns() {
-  const wrap = document.getElementById("serverBtns");
-  wrap.innerHTML = SERVERS.map((s, i) => `
-    <button class="server-btn ${i === state.activeServer ? "active" : ""}"
-      onclick="selectServer(${i})">
-      <i class="fas ${s.icon}"></i> ${s.name}
-    </button>
-  `).join("");
+  document.getElementById("serverBtns").innerHTML =
+    ECLIPSE_CONFIG.SERVERS.map((s, i) => `
+      <button class="server-btn ${i === state.activeServer ? "active" : ""}"
+        onclick="selectServer(${i})">
+        <i class="fas ${s.icon}"></i> ${s.name}
+      </button>`).join("");
 }
 
 function selectServer(idx) {
   state.activeServer = idx;
   buildServerBtns();
-
-  // If already playing, swap iframe src immediately
   if (state.playing) loadPlayer();
 }
 
 function loadPlayer() {
-  const id     = state.movieId;
-  const server = SERVERS[state.activeServer];
+  const server = ECLIPSE_CONFIG.SERVERS[state.activeServer];
   const frame  = document.getElementById("playerFrame");
-
-  frame.src = server.url(id);
+  frame.src = server.url(state.movieId);
   frame.style.display = "block";
 
-  document.getElementById("playerSkeleton").style.display = "none";
-  document.getElementById("sourceSelector").style.display = "none";
+  document.getElementById("playerSkeleton").style.display    = "none";
+  document.getElementById("sourceSelector").style.display    = "none";
   document.getElementById("playerControlsBar").style.display = "flex";
 
-  // PCB title
   const title = state.movie?.title || "Đang phát";
-  document.getElementById("pcbTitle").textContent =
-    `▶  ${title}  —  ${server.name}`;
-
+  document.getElementById("pcbTitle").textContent = `▶  ${title}  —  ${server.name}`;
   state.playing = true;
   showToast(`▶ Đang phát với ${server.name}`);
 }
@@ -196,29 +139,21 @@ function showSourceSelector(movie) {
   sel.style.display = "flex";
   document.getElementById("playerSkeleton").style.display = "none";
 
-  // Poster
-  const posterWrap = document.getElementById("sourcePoster");
-  posterWrap.innerHTML = `<img src="${poster(movie.poster_path)}" alt="${movie.title}" />`;
-
-  // Title + meta
+  document.getElementById("sourcePoster").innerHTML =
+    `<img src="${poster(movie.poster_path)}" alt="${movie.title}" />`;
   document.getElementById("sourceTitle").textContent = movie.title;
   document.getElementById("sourceMeta").innerHTML = `
     <span><i class="fas fa-star" style="color:var(--gold)"></i> ${movie.vote_average?.toFixed(1) || "N/A"}</span>
     <span><i class="fas fa-calendar"></i> ${year(movie.release_date)}</span>
-    <span><i class="fas fa-clock"></i> ${runtime(movie.runtime)}</span>
-    <span><i class="fas fa-language"></i> ${(movie.original_language || "").toUpperCase()}</span>
-  `;
+    <span><i class="fas fa-clock"></i> ${formatRuntime(movie.runtime)}</span>
+    <span><i class="fas fa-language"></i> ${(movie.original_language || "").toUpperCase()}</span>`;
 
-  // Server buttons
   buildServerBtns();
 
-  // Play button
   document.getElementById("btnPlayNow").onclick = loadPlayer;
-
-  // Change server button in controls bar
   document.getElementById("btnChangeServer").onclick = () => {
-    document.getElementById("playerFrame").style.display = "none";
-    document.getElementById("playerControlsBar").style.display = "none";
+    document.getElementById("playerFrame").style.display          = "none";
+    document.getElementById("playerControlsBar").style.display    = "none";
     sel.style.display = "flex";
     state.playing = false;
   };
@@ -229,29 +164,22 @@ function showSourceSelector(movie) {
 // ══════════════════════════════════════════════
 function renderInfoCard(movie) {
   document.getElementById("wicSkeleton").style.display = "none";
-  const content = document.getElementById("wicContent");
-  content.style.display = "block";
+  document.getElementById("wicContent").style.display  = "block";
 
-  const inWL  = state.watchlist.includes(movie.id);
-  const inFav = state.favorites.includes(movie.id);
-  const genres= movie.genres?.map((g) => g.name) || [];
+  const inWL  = Storage.has("cineverse_watchlist", movie.id);
+  const inFav = Storage.has("cineverse_favorites", movie.id);
 
   document.getElementById("wicTitle").textContent = movie.title;
-
   document.getElementById("wicMeta").innerHTML = `
     <span class="rating"><i class="fas fa-star"></i> ${movie.vote_average?.toFixed(1)} (${movie.vote_count?.toLocaleString()})</span>
     <span><i class="fas fa-calendar"></i> ${formatDate(movie.release_date)}</span>
-    <span><i class="fas fa-clock"></i> ${runtime(movie.runtime)}</span>
-    <span><i class="fas fa-language"></i> ${(movie.original_language || "").toUpperCase()}</span>
-  `;
+    <span><i class="fas fa-clock"></i> ${formatRuntime(movie.runtime)}</span>
+    <span><i class="fas fa-language"></i> ${(movie.original_language || "").toUpperCase()}</span>`;
 
-  document.getElementById("wicOverview").textContent =
-    movie.overview || "Chưa có mô tả tiếng Việt.";
-
+  document.getElementById("wicOverview").textContent = movie.overview || "Chưa có mô tả tiếng Việt.";
   document.getElementById("wicTags").innerHTML =
-    genres.map((g) => `<span class="wic-tag">${g}</span>`).join("");
+    (movie.genres || []).map((g) => `<span class="wic-tag">${g.name}</span>`).join("");
 
-  // Buttons
   const wlBtn  = document.getElementById("wlBtn");
   const favBtn = document.getElementById("favBtn");
   const detLink= document.getElementById("detailLink");
@@ -259,30 +187,27 @@ function renderInfoCard(movie) {
   if (inWL)  wlBtn.classList.add("active-red");
   if (inFav) favBtn.classList.add("active-gold");
 
-  wlBtn.onclick  = () => toggleWatchlist(movie.id, escTitle(movie.title));
-  favBtn.onclick = () => toggleFavorite(movie.id, escTitle(movie.title));
+  wlBtn.onclick  = () => toggleWatchlist(movie.id, escapeTitle(movie.title));
+  favBtn.onclick = () => toggleFavorite(movie.id, escapeTitle(movie.title));
   document.getElementById("shareBtn").onclick = shareMovie;
-
   detLink.href = `detail.html?id=${movie.id}`;
 }
 
 // ══════════════════════════════════════════════
-//  BREADCRUMB + TITLE + DETAIL LINKS
+//  META (breadcrumb + title)
 // ══════════════════════════════════════════════
 function renderMeta(movie) {
-  document.title = `${movie.title} – Eclipse Cinema`;
-
-  document.getElementById("breadcrumbTitle").textContent = movie.title;
-  document.getElementById("breadcrumbDetail").href = `detail.html?id=${movie.id}`;
-
-  document.getElementById("pcbDetailLink").href = `detail.html?id=${movie.id}`;
+  document.title = `${movie.title} – ${ECLIPSE_CONFIG.APP_NAME}`;
+  document.getElementById("breadcrumbTitle").textContent      = movie.title;
+  document.getElementById("breadcrumbDetail").href            = `detail.html?id=${movie.id}`;
+  document.getElementById("pcbDetailLink").href               = `detail.html?id=${movie.id}`;
 }
 
 // ══════════════════════════════════════════════
-//  SIMILAR MOVIES
+//  SIMILAR
 // ══════════════════════════════════════════════
 function renderSimilar(movies) {
-  const list = document.getElementById("similarList");
+  const list     = document.getElementById("similarList");
   const filtered = movies?.filter((m) => m.poster_path).slice(0, 15) || [];
 
   if (!filtered.length) {
@@ -303,50 +228,40 @@ function renderSimilar(movies) {
         </div>
       </div>
       <div class="similar-watch-btn"><i class="fas fa-play"></i></div>
-    </div>
-  `).join("");
+    </div>`).join("");
 }
 
 // ══════════════════════════════════════════════
 //  COMMENTS
 // ══════════════════════════════════════════════
 function initComments() {
-  const user = JSON.parse(localStorage.getItem("currentUser") || "null");
+  const user     = JSON.parse(localStorage.getItem("currentUser") || "null");
   const formWrap = document.getElementById("commentFormWrap");
 
   if (user) {
-    // Logged in — show form
     const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(user.username)}`;
     formWrap.innerHTML = `
       <form class="cmt-form" id="cmtForm" autocomplete="off">
-        <div class="cmt-avatar">
-          <img src="${avatarUrl}" alt="${user.username}" />
-        </div>
+        <div class="cmt-avatar"><img src="${avatarUrl}" alt="${user.username}" /></div>
         <div class="cmt-input-wrap">
           <input class="cmt-input" type="text" id="cmtInput"
             placeholder="Bình luận với tư cách ${user.username}..." required />
-          <button class="cmt-send-btn" type="submit">
-            <i class="fas fa-paper-plane"></i>
-          </button>
+          <button class="cmt-send-btn" type="submit"><i class="fas fa-paper-plane"></i></button>
         </div>
-      </form>
-    `;
+      </form>`;
 
     document.getElementById("cmtForm").addEventListener("submit", (e) => {
       e.preventDefault();
       const text = document.getElementById("cmtInput").value.trim();
       if (!text) return;
       document.getElementById("cmtInput").value = "";
-
       const all = JSON.parse(localStorage.getItem(`comments-${state.movieId}`) || "[]");
       all.unshift({ text, user: { username: user.username }, createdAt: Date.now() });
       localStorage.setItem(`comments-${state.movieId}`, JSON.stringify(all));
       renderComments();
       showToast("✅ Đã đăng bình luận!");
     });
-
   } else {
-    // Guest
     formWrap.innerHTML = `
       <div class="cmt-guest-prompt" onclick="location.href='login.html'">
         <div class="cmt-guest-icon"><i class="fas fa-user"></i></div>
@@ -354,11 +269,8 @@ function initComments() {
           <p>Đăng nhập để bình luận</p>
           <span>Chia sẻ cảm nghĩ về bộ phim này</span>
         </div>
-        <a href="login.html" class="cmt-guest-btn">
-          <i class="fas fa-sign-in-alt"></i> Đăng Nhập
-        </a>
-      </div>
-    `;
+        <a href="login.html" class="cmt-guest-btn"><i class="fas fa-sign-in-alt"></i> Đăng Nhập</a>
+      </div>`;
   }
 
   renderComments();
@@ -368,7 +280,6 @@ function renderComments() {
   const list = document.getElementById("commentsList");
   const all  = JSON.parse(localStorage.getItem(`comments-${state.movieId}`) || "[]");
 
-  // Update count
   const countEl = document.getElementById("commentCount");
   if (countEl) countEl.textContent = all.length ? `${all.length} bình luận` : "";
 
@@ -377,8 +288,7 @@ function renderComments() {
       <div class="comments-empty">
         <i class="fas fa-comment-slash"></i>
         Chưa có bình luận. Hãy là người đầu tiên!
-      </div>
-    `;
+      </div>`;
     return;
   }
 
@@ -386,9 +296,7 @@ function renderComments() {
     const avatarUrl = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(c.user.username)}`;
     return `
       <div class="cmt-item">
-        <div class="cmt-item-avatar">
-          <img src="${c.user.photoURL || avatarUrl}" alt="${c.user.username}" />
-        </div>
+        <div class="cmt-item-avatar"><img src="${c.user.photoURL || avatarUrl}" alt="${c.user.username}" /></div>
         <div class="cmt-item-body">
           <div class="cmt-bubble">
             <div class="cmt-username">${c.user.username}</div>
@@ -398,66 +306,30 @@ function renderComments() {
             <span class="cmt-time">${timeAgo(c.createdAt)}</span>
           </div>
         </div>
-      </div>
-    `;
+      </div>`;
   }).join("");
-}
-
-function escapeHtml(s) {
-  return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // ══════════════════════════════════════════════
 //  WATCHLIST & FAVORITES
 // ══════════════════════════════════════════════
 function toggleWatchlist(id, title) {
-  const idx = state.watchlist.indexOf(id);
-  const btn = document.getElementById("wlBtn");
-  if (idx === -1) {
-    state.watchlist.push(id);
-    showToast(`🔖 Đã thêm "${title}" vào xem sau`);
-    btn?.classList.add("active-red");
-  } else {
-    state.watchlist.splice(idx, 1);
-    showToast(`✖ Đã xóa "${title}" khỏi xem sau`);
-    btn?.classList.remove("active-red");
-  }
-  localStorage.setItem("cineverse_watchlist", JSON.stringify(state.watchlist));
+  const added = Storage.toggle("cineverse_watchlist", id);
+  state.watchlist = Storage.get("cineverse_watchlist");
+  showToast(added ? `🔖 Đã thêm "${title}" vào xem sau` : `✖ Đã xóa "${title}" khỏi xem sau`);
+  document.getElementById("wlBtn")?.classList.toggle("active-red", added);
 }
 
 function toggleFavorite(id, title) {
-  const idx = state.favorites.indexOf(id);
-  const btn = document.getElementById("favBtn");
-  if (idx === -1) {
-    state.favorites.push(id);
-    showToast(`❤️ Đã thêm "${title}" vào yêu thích`);
-    btn?.classList.add("active-gold");
-  } else {
-    state.favorites.splice(idx, 1);
-    showToast(`✖ Đã xóa "${title}" khỏi yêu thích`);
-    btn?.classList.remove("active-gold");
-  }
-  localStorage.setItem("cineverse_favorites", JSON.stringify(state.favorites));
+  const added = Storage.toggle("cineverse_favorites", id);
+  state.favorites = Storage.get("cineverse_favorites");
+  showToast(added ? `❤️ Đã thêm "${title}" vào yêu thích` : `✖ Đã xóa "${title}" khỏi yêu thích`);
+  document.getElementById("favBtn")?.classList.toggle("active-gold", added);
 }
 
 function shareMovie() {
-  if (navigator.share) {
-    navigator.share({ title: document.title, url: location.href }).catch(() => {});
-  } else {
-    navigator.clipboard.writeText(location.href).then(() => showToast("🔗 Đã sao chép link!"));
-  }
-}
-
-// ══════════════════════════════════════════════
-//  TOAST
-// ══════════════════════════════════════════════
-let toastTimer;
-function showToast(msg) {
-  const t = document.getElementById("toast");
-  t.textContent = msg;
-  t.classList.add("show");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 3000);
+  if (navigator.share) navigator.share({ title: document.title, url: location.href }).catch(() => {});
+  else navigator.clipboard.writeText(location.href).then(() => showToast("🔗 Đã sao chép link!"));
 }
 
 // ══════════════════════════════════════════════
@@ -470,7 +342,7 @@ function initBackToTop() {
 }
 
 // ══════════════════════════════════════════════
-//  ERROR PAGE
+//  ERROR
 // ══════════════════════════════════════════════
 function showError(msg = "Không tìm thấy phim") {
   document.querySelector(".watch-layout").innerHTML = `
@@ -478,11 +350,8 @@ function showError(msg = "Không tìm thấy phim") {
       <i class="fas fa-exclamation-circle" style="font-size:60px;color:var(--black4);display:block;margin-bottom:20px"></i>
       <h2 style="font-family:var(--font-display);font-size:40px;color:var(--grey);margin-bottom:12px">${msg}</h2>
       <p style="color:var(--grey);margin-bottom:28px;font-size:14px">ID phim không hợp lệ hoặc đã bị xóa.</p>
-      <a href="index.html" class="btn-primary">
-        <i class="fas fa-arrow-left"></i> Về Trang Chủ
-      </a>
-    </div>
-  `;
+      <a href="index.html" class="btn-primary"><i class="fas fa-arrow-left"></i> Về Trang Chủ</a>
+    </div>`;
 }
 
 // ══════════════════════════════════════════════
@@ -494,23 +363,18 @@ async function init() {
   initBackToTop();
   loadGenres();
 
-  const params = new URLSearchParams(location.search);
-  const id = params.get("id");
-
+  const id = new URLSearchParams(location.search).get("id");
   if (!id) { showError("Thiếu ID Phim"); return; }
   state.movieId = parseInt(id, 10);
 
-  // Parallel fetch
   const [movie, similar] = await Promise.all([
     tmdb(`/movie/${id}`),
     tmdb(`/movie/${id}/similar`),
   ]);
 
   if (!movie) { showError("Không Tìm Thấy Phim"); return; }
-
   state.movie = movie;
 
-  // Render everything
   renderMeta(movie);
   showSourceSelector(movie);
   renderInfoCard(movie);
