@@ -31,6 +31,7 @@ function initNavbar() {
   const navLinks  = document.getElementById("navLinks");
   const avatarBtn = document.getElementById("userAvatarBtn");
   const userDD    = document.getElementById("userDropdown");
+  if (!navbar) return;
 
   window.addEventListener("scroll", () => navbar.classList.toggle("scrolled", window.scrollY > 20));
   navbar.classList.add("scrolled");
@@ -47,11 +48,13 @@ function initNavbar() {
     });
   });
 
-  avatarBtn.addEventListener("click", (e) => { e.stopPropagation(); userDD.classList.toggle("open"); });
+  if (avatarBtn && userDD) {
+    avatarBtn.addEventListener("click", (e) => { e.stopPropagation(); userDD.classList.toggle("open"); });
+  }
 
   document.addEventListener("click", () => {
-    userDD.classList.remove("open");
-    document.getElementById("searchResults").classList.remove("open");
+    if (userDD) userDD.classList.remove("open");
+    document.getElementById("searchResults")?.classList.remove("open");
   });
 
   document.querySelectorAll(".dropdown-toggle").forEach((btn) => {
@@ -82,6 +85,7 @@ function initSearch() {
 
 async function doSearch(query) {
   const results = document.getElementById("searchResults");
+  if (!results) return;
   if (!query) { results.classList.remove("open"); return; }
   results.innerHTML = `<div style="padding:14px;color:var(--grey);font-size:13px;text-align:center">Đang tìm...</div>`;
   results.classList.add("open");
@@ -550,12 +554,19 @@ function lightboxNav(dir) {
   openLightbox((state.lightbox.index + dir + total) % total);
 }
 
-document.getElementById("lightboxClose").addEventListener("click", closeLightbox);
-document.getElementById("lightboxPrev").addEventListener("click", () => lightboxNav(-1));
-document.getElementById("lightboxNext").addEventListener("click", () => lightboxNav(1));
-document.getElementById("lightbox").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeLightbox(); });
+const lightboxCloseBtn = document.getElementById("lightboxClose");
+const lightboxPrevBtn = document.getElementById("lightboxPrev");
+const lightboxNextBtn = document.getElementById("lightboxNext");
+const lightboxEl = document.getElementById("lightbox");
+
+if (lightboxCloseBtn) lightboxCloseBtn.addEventListener("click", closeLightbox);
+if (lightboxPrevBtn)  lightboxPrevBtn.addEventListener("click", () => lightboxNav(-1));
+if (lightboxNextBtn)  lightboxNextBtn.addEventListener("click", () => lightboxNav(1));
+if (lightboxEl) {
+  lightboxEl.addEventListener("click", (e) => { if (e.target === e.currentTarget) closeLightbox(); });
+}
 document.addEventListener("keydown", (e) => {
-  if (!document.getElementById("lightbox").classList.contains("open")) return;
+  if (!lightboxEl || !lightboxEl.classList.contains("open")) return;
   if (e.key === "Escape")     closeLightbox();
   if (e.key === "ArrowLeft")  lightboxNav(-1);
   if (e.key === "ArrowRight") lightboxNav(1);

@@ -23,35 +23,40 @@ function initNavbar() {
   const navLinks = document.getElementById("navLinks");
   const avatarBtn = document.getElementById("userAvatarBtn");
   const userDD = document.getElementById("userDropdown");
+  if (!navbar) return;
 
   window.addEventListener("scroll", () =>
     navbar.classList.toggle("scrolled", window.scrollY > 20)
   );
   navbar.classList.add("scrolled");
 
-  hamburger.addEventListener("click", () => {
-    navLinks.classList.toggle("open");
-    const open = navLinks.classList.contains("open");
-    hamburger.querySelectorAll("span").forEach((s, i) => {
-      if (open) {
-        if (i === 0) s.style.transform = "translateY(7px) rotate(45deg)";
-        if (i === 1) s.style.opacity = "0";
-        if (i === 2) s.style.transform = "translateY(-7px) rotate(-45deg)";
-      } else {
-        s.style.transform = "";
-        s.style.opacity = "";
-      }
+  if (hamburger && navLinks) {
+    hamburger.addEventListener("click", () => {
+      navLinks.classList.toggle("open");
+      const open = navLinks.classList.contains("open");
+      hamburger.querySelectorAll("span").forEach((s, i) => {
+        if (open) {
+          if (i === 0) s.style.transform = "translateY(7px) rotate(45deg)";
+          if (i === 1) s.style.opacity = "0";
+          if (i === 2) s.style.transform = "translateY(-7px) rotate(-45deg)";
+        } else {
+          s.style.transform = "";
+          s.style.opacity = "";
+        }
+      });
     });
-  });
+  }
 
-  avatarBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    userDD.classList.toggle("open");
-  });
+  if (avatarBtn && userDD) {
+    avatarBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      userDD.classList.toggle("open");
+    });
+  }
 
   document.addEventListener("click", () => {
-    userDD.classList.remove("open");
-    document.getElementById("searchResults").classList.remove("open");
+    if (userDD) userDD.classList.remove("open");
+    document.getElementById("searchResults")?.classList.remove("open");
   });
 }
 
@@ -59,30 +64,42 @@ function initAuthNavbar() {
   if (!window.CinemaAuth) return;
   const session = CinemaAuth.getSession();
 
+  const userAvatarBtn = document.getElementById("userAvatarBtn");
+  const userNameEl = document.querySelector(".user-name");
+  const userEmailEl = document.querySelector(".user-email");
+  const logoutLink = document.querySelector(".logout-link");
+  const userMenuList = document.querySelector(".user-menu-list");
+
   if (session && CinemaAuth.isLoggedIn()) {
     const { firstName, lastName, email } = session.user;
     const initials = `${firstName[0]}${lastName[0]}`.toUpperCase();
-    document.getElementById("userAvatarBtn").innerHTML = `
-      <div style="width:100%;height:100%;background:var(--red);display:grid;place-items:center;
-        font-family:var(--font-cond);font-size:13px;font-weight:700;color:#fff;letter-spacing:1px">
-        ${initials}
-      </div>`;
-    document.querySelector(".user-name").textContent = `${firstName} ${lastName}`;
-    document.querySelector(".user-email").textContent = email;
-    document.querySelector(".logout-link").addEventListener("click", (e) => {
-      e.preventDefault();
-      CinemaAuth.logout();
-      showToast("Đã đăng xuất. Hẹn gặp lại!");
-      setTimeout(() => {
-        window.location.href = "login.html";
-      }, 1000);
-    });
+    if (userAvatarBtn) {
+      userAvatarBtn.innerHTML = `
+        <div style="width:100%;height:100%;background:var(--red);display:grid;place-items:center;
+          font-family:var(--font-cond);font-size:13px;font-weight:700;color:#fff;letter-spacing:1px">
+          ${initials}
+        </div>`;
+    }
+    if (userNameEl) userNameEl.textContent = `${firstName} ${lastName}`;
+    if (userEmailEl) userEmailEl.textContent = email;
+    if (logoutLink) {
+      logoutLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        CinemaAuth.logout();
+        showToast("Đã đăng xuất. Hẹn gặp lại!");
+        setTimeout(() => {
+          window.location.href = "login.html";
+        }, 1000);
+      });
+    }
   } else {
-    document.querySelector(".user-name").textContent = "Khách";
-    document.querySelector(".user-email").textContent = "Chưa đăng nhập";
-    document.querySelector(".user-menu-list").innerHTML = `
-      <li><a href="login.html" style="color:var(--red)!important"><i class="fas fa-sign-in-alt"></i> Đăng Nhập</a></li>
-      <li><a href="login.html"><i class="fas fa-user-plus"></i> Đăng Ký</a></li>`;
+    if (userNameEl) userNameEl.textContent = "Khách";
+    if (userEmailEl) userEmailEl.textContent = "Chưa đăng nhập";
+    if (userMenuList) {
+      userMenuList.innerHTML = `
+        <li><a href="login.html" style="color:var(--red)!important"><i class="fas fa-sign-in-alt"></i> Đăng Nhập</a></li>
+        <li><a href="login.html"><i class="fas fa-user-plus"></i> Đăng Ký</a></li>`;
+    }
   }
 }
 

@@ -27,40 +27,45 @@ function initNavbar() {
   const navLinks  = document.getElementById("navLinks");
   const avatarBtn = document.getElementById("userAvatarBtn");
   const userDD    = document.getElementById("userDropdown");
+  if (!navbar) return;
 
   window.addEventListener("scroll", () =>
     navbar.classList.toggle("scrolled", window.scrollY > 60)
   );
 
-  hamburger.addEventListener("click", () => {
-    navLinks.classList.toggle("open");
-    const open = navLinks.classList.contains("open");
-    hamburger.querySelectorAll("span").forEach((s, i) => {
-      if (open) {
-        if (i === 0) s.style.transform = "translateY(7px) rotate(45deg)";
-        if (i === 1) s.style.opacity   = "0";
-        if (i === 2) s.style.transform = "translateY(-7px) rotate(-45deg)";
-      } else { s.style.transform = ""; s.style.opacity = ""; }
+  if (hamburger && navLinks) {
+    hamburger.addEventListener("click", () => {
+      navLinks.classList.toggle("open");
+      const open = navLinks.classList.contains("open");
+      hamburger.querySelectorAll("span").forEach((s, i) => {
+        if (open) {
+          if (i === 0) s.style.transform = "translateY(7px) rotate(45deg)";
+          if (i === 1) s.style.opacity   = "0";
+          if (i === 2) s.style.transform = "translateY(-7px) rotate(-45deg)";
+        } else { s.style.transform = ""; s.style.opacity = ""; }
+      });
     });
-  });
+  }
 
-  avatarBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    userDD.classList.toggle("open");
-  });
+  if (avatarBtn && userDD) {
+    avatarBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      userDD.classList.toggle("open");
+    });
+  }
 
   document.querySelectorAll(".dropdown-toggle").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       if (window.innerWidth <= 768) {
         e.preventDefault();
-        btn.closest(".dropdown").classList.toggle("open");
+        btn.closest(".dropdown")?.classList.toggle("open");
       }
     });
   });
 
   document.addEventListener("click", () => {
-    userDD.classList.remove("open");
-    document.getElementById("searchResults").classList.remove("open");
+    if (userDD) userDD.classList.remove("open");
+    document.getElementById("searchResults")?.classList.remove("open");
   });
 
   document.querySelectorAll(".nav-link[href^='#']").forEach((link) => {
@@ -98,11 +103,16 @@ function initAuthNavbar() {
       setTimeout(() => { window.location.href = "login.html"; }, 1200);
     });
   } else {
-    document.querySelector(".user-name").textContent  = "Khách";
-    document.querySelector(".user-email").textContent = "Chưa đăng nhập";
-    document.querySelector(".user-menu-list").innerHTML = `
-      <li><a href="login.html" style="color:var(--red)!important"><i class="fas fa-sign-in-alt"></i> Đăng Nhập</a></li>
-      <li><a href="login.html"><i class="fas fa-user-plus"></i> Đăng Ký</a></li>`;
+    const userNameEl = document.querySelector(".user-name");
+    const userEmailEl = document.querySelector(".user-email");
+    const userMenuListEl = document.querySelector(".user-menu-list");
+    if (userNameEl) userNameEl.textContent = "Khách";
+    if (userEmailEl) userEmailEl.textContent = "Chưa đăng nhập";
+    if (userMenuListEl) {
+      userMenuListEl.innerHTML = `
+        <li><a href="login.html" style="color:var(--red)!important"><i class="fas fa-sign-in-alt"></i> Đăng Nhập</a></li>
+        <li><a href="login.html"><i class="fas fa-user-plus"></i> Đăng Ký</a></li>`;
+    }
   }
 }
 
@@ -127,6 +137,7 @@ function initSearch() {
 
 async function doSearch(query) {
   const results = document.getElementById("searchResults");
+  if (!results) return;
   if (!query) { results.classList.remove("open"); return; }
   results.innerHTML = `<div style="padding:14px;color:var(--grey);font-size:13px;text-align:center">Đang tìm...</div>`;
   results.classList.add("open");

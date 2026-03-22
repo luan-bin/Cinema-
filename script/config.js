@@ -41,6 +41,12 @@ async function tmdbFetch(endpoint, params = {}) {
   url.searchParams.set("language", ECLIPSE_CONFIG.LANG);
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
 
+  if (!ECLIPSE_CONFIG.API_KEY || ECLIPSE_CONFIG.API_KEY.trim() === "") {
+    console.error("[TMDB] missing API key");
+    showToast?.("Vui lòng thiết lập TMDB API key trong config.js");
+    return null;
+  }
+
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

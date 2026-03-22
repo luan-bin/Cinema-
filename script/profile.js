@@ -18,36 +18,40 @@ function initNavbar() {
   const navLinks = document.getElementById("navLinks");
   const avatarBtn = document.getElementById("userAvatarBtn");
   const userDD = document.getElementById("userDropdown");
+  if (!navbar) return;
 
   window.addEventListener("scroll", () =>
     navbar.classList.toggle("scrolled", window.scrollY > 20)
   );
   navbar.classList.add("scrolled");
 
-  hamburger.addEventListener("click", () => {
-    navLinks.classList.toggle("open");
-    const open = navLinks.classList.contains("open");
-    hamburger.querySelectorAll("span").forEach((s, i) => {
-      if (open) {
-        if (i === 0) s.style.transform = "translateY(7px) rotate(45deg)";
-        if (i === 1) s.style.opacity = "0";
-        if (i === 2) s.style.transform = "translateY(-7px) rotate(-45deg)";
-      } else {
-        s.style.transform = "";
-        s.style.opacity = "";
-      }
+  if (hamburger && navLinks) {
+    hamburger.addEventListener("click", () => {
+      navLinks.classList.toggle("open");
+      const open = navLinks.classList.contains("open");
+      hamburger.querySelectorAll("span").forEach((s, i) => {
+        if (open) {
+          if (i === 0) s.style.transform = "translateY(7px) rotate(45deg)";
+          if (i === 1) s.style.opacity = "0";
+          if (i === 2) s.style.transform = "translateY(-7px) rotate(-45deg)";
+        } else {
+          s.style.transform = "";
+          s.style.opacity = "";
+        }
+      });
     });
-  });
+  }
 
-  avatarBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    userDD.classList.toggle("open");
-  });
+  if (avatarBtn && userDD) {
+    avatarBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      userDD.classList.toggle("open");
+    });
+  }
 
   document.addEventListener("click", () => {
-    userDD.classList.remove("open");
-    const sr = document.getElementById("searchResults");
-    if (sr) sr.classList.remove("open");
+    if (userDD) userDD.classList.remove("open");
+    document.getElementById("searchResults")?.classList.remove("open");
   });
 }
 
