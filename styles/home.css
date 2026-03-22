@@ -111,7 +111,7 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 .nav-logo {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 20px;
   flex-shrink: 0;
   transition: opacity var(--transition);
 }
@@ -128,7 +128,7 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 }
 .logo-text {
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size: 24px;
   letter-spacing: 2.5px;
   color: var(--white);
   line-height: 1;
@@ -139,13 +139,13 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 .nav-links {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex: 1;
 }
 
 .nav-link {
   font-family: var(--font-cond);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
   letter-spacing: 1.2px;
   text-transform: uppercase;
@@ -546,7 +546,7 @@ button { cursor: pointer; border: none; background: none; font-family: inherit; 
 .hero-meta i { color: var(--grey); font-size: 11px; }
 
 .hero-overview {
-  font-size: 14.5px;
+  font-size: 16px;
   line-height: 1.68;
   color: rgba(208, 208, 220, 0.8);
   max-width: 540px;
