@@ -200,10 +200,6 @@ function renderHeroSlides() {
           <button class="btn-primary" onclick="location.href='detail.html?id=${m.id}'">
             <i class="fas fa-info-circle"></i> Xem Chi Tiết
           </button>
-          <a class="btn-primary" href="watch.html?id=${m.id}"
-            style="background:rgba(255,255,255,0.12);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.2)">
-            <i class="fas fa-play"></i> Xem Phim
-          </a>
           <button class="btn-secondary" onclick="toggleWatchlist(${m.id},'${escapeTitle(m.title)}')">
             <i class="fas fa-bookmark"></i> Xem Sau
           </button>
