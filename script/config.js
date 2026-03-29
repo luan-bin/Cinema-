@@ -33,31 +33,6 @@ const ECLIPSE_CONFIG = {
 };
 
 /* ──────────────────────────────────────────────
-   TMDB fetch wrapper — dùng chung ở mọi nơi
-────────────────────────────────────────────── */
-async function tmdbFetch(endpoint, params = {}) {
-  const url = new URL(`${ECLIPSE_CONFIG.BASE_URL}${endpoint}`);
-  url.searchParams.set("api_key", ECLIPSE_CONFIG.API_KEY);
-  url.searchParams.set("language", ECLIPSE_CONFIG.LANG);
-  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-
-  if (!ECLIPSE_CONFIG.API_KEY || ECLIPSE_CONFIG.API_KEY.trim() === "") {
-    console.error("[TMDB] missing API key");
-    showToast?.("Vui lòng thiết lập TMDB API key trong config.js");
-    return null;
-  }
-
-  try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
-  } catch (err) {
-    console.error(`[TMDB] ${endpoint}`, err);
-    return null;
-  }
-}
-
-/* ──────────────────────────────────────────────
    Image URL helpers
 ────────────────────────────────────────────── */
 const imgUrl = (path, size) =>
