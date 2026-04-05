@@ -59,4 +59,7 @@ const EclipseApi = {
 
   /** Phim đang chiếu (có thể lọc theo region) */
   fetchNowPlaying: (region) => tmdbFetch("/movie/now_playing", { region }),
+
+  /** Discover phim với filters */
+  discoverMovie: (params = {}) => tmdbFetch("/discover/movie", params),
 };

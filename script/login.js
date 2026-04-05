@@ -258,15 +258,16 @@
         return;
       }
 
-      const result = CinemaAuth.login({
-        email:    emailInput.value,
-        password: passInput.value,
-        remember: rememberCheck.checked,
-      });
+      const result = CinemaAuth.login(
+        emailInput.value,
+        passInput.value,
+        rememberCheck.checked
+      );
 
       if (result.success) {
-        showToast(`Chào mừng, ${result.user.firstName}! 🎬`, "success");
-        setTimeout(() => (window.location.href = "index.html"), 1200);
+        const user = CinemaAuth.getUser();
+        showToast(`Chào mừng, ${user.firstName}! 🎬`, "success");
+        setTimeout(() => (window.location.href = "profile.html"), 1200);
       } else {
         showFormError(loginForm, result.message);
         showToast(result.message, "error");
@@ -319,15 +320,15 @@
         return;
       }
 
-      const result = CinemaAuth.register({
-        firstName: firstName.value,
-        lastName:  lastName.value,
-        email:     email.value,
-        password:  pass.value,
-      });
+      const result = CinemaAuth.register(
+        firstName.value,
+        lastName.value,
+        email.value,
+        pass.value
+      );
 
       if (result.success) {
-        showToast(`Chào mừng ${result.user.firstName}! Tài khoản đã được tạo 🎬`, "success");
+        showToast(`Chào mừng! Tài khoản đã được tạo 🎬`, "success");
         setTimeout(() => {
           registerForm.reset();
           pwBar.className = "pw-bar";

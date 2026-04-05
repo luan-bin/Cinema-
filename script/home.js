@@ -188,9 +188,13 @@ async function doSearch(query) {
    Click → filter section Popular theo genre
 ══════════════════════════════════════════════ */
 async function loadGenres() {
+  const genreContainer = document.getElementById("genreList");
+  if (!genreContainer) return;
+
   const data = await tmdb("/genre/movie/list");
   if (!data) return;
-  document.getElementById("genreList").innerHTML = data.genres.map((g) =>
+
+  genreContainer.innerHTML = data.genres.map((g) =>
     `<a href="#" class="genre-item" onclick="filterByGenre(${g.id},'${g.name}');return false">${g.name}</a>`
   ).join("");
 }

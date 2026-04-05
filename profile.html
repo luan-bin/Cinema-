@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="styles/home.css" />
   <link rel="stylesheet" href="styles/profile.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Roboto:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
 </head>
 <body>
@@ -72,21 +72,35 @@
   <main class="profile-page">
     <section class="profile-hero" id="profileHero">
       <div class="profile-card">
-        <div class="profile-avatar-wrap">
-          <img id="profileAvatar" src="https://api.dicebear.com/7.x/initials/svg?seed=Guest" alt="Avatar" />
-        </div>
-        <div class="profile-main">
-          <h1 class="profile-name" id="profileName">Khách</h1>
-          <p class="profile-email" id="profileEmail">Bạn chưa đăng nhập</p>
-          <div class="profile-meta">
-            <span id="profileSince"><i class="fas fa-clock"></i> Thành viên mới</span>
-            <span id="profileStats"><i class="fas fa-film"></i> 0 phim trong thư viện</span>
+        <div class="profile-avatar-section">
+          <div class="profile-avatar-wrap">
+            <img id="profileAvatar" src="https://api.dicebear.com/7.x/initials/svg?seed=Guest" alt="Avatar" />
+            <div class="avatar-badge" id="avatarBadge">
+              <i class="fas fa-crown"></i>
+            </div>
           </div>
         </div>
-        <div class="profile-actions">
-          <a href="browse.html" class="btn-secondary">
-            <i class="fas fa-compass"></i> Khám Phá Phim
-          </a>
+        <div class="profile-main">
+          <div class="profile-header">
+            <div>
+              <h1 class="profile-name" id="profileName">Khách</h1>
+              <p class="profile-email" id="profileEmail">Bạn chưa đăng nhập</p>
+            </div>
+            <span class="profile-badge" id="profileBadge">Member</span>
+          </div>
+          <div class="profile-meta">
+            <span id="profileSince"><i class="fas fa-clock"></i> Thành viên mới</span>
+            <span id="profileStats"><i class="fas fa-film"></i> 0 phim</span>
+            <span id="profileId" style="display:none;"><i class="fas fa-id-card"></i> <span id="profileIdValue"></span></span>
+          </div>
+          <div class="profile-actions">
+            <button id="editProfileBtn" class="btn-primary" style="display:none;">
+              <i class="fas fa-pencil-alt"></i> Chỉnh Sửa Hồ Sơ
+            </button>
+            <a href="browse.html" class="btn-secondary">
+              <i class="fas fa-compass"></i> Khám Phá Phim
+            </a>
+          </div>
         </div>
       </div>
 
@@ -111,8 +125,9 @@
       <!-- OVERVIEW -->
       <div class="profile-section active" id="section-overview">
         <div class="profile-grid">
+          <!-- Account Statistics -->
           <div class="profile-panel">
-            <h3 class="panel-title"><i class="fas fa-chart-line"></i> Tóm Tắt Hoạt Động</h3>
+            <h3 class="panel-title"><i class="fas fa-chart-line"></i> Thống Kê Tài Khoản</h3>
             <div class="overview-stats">
               <div class="overview-stat">
                 <span class="label">Xem Sau</span>
@@ -122,25 +137,55 @@
                 <span class="label">Yêu Thích</span>
                 <span class="value" id="statFavorites">0</span>
               </div>
+              <div class="overview-stat">
+                <span class="label">Tổng Cộng</span>
+                <span class="value" id="statTotal">0</span>
+              </div>
             </div>
           </div>
 
+          <!-- Account Information -->
           <div class="profile-panel">
             <h3 class="panel-title"><i class="fas fa-info-circle"></i> Thông Tin Tài Khoản</h3>
             <ul class="info-list">
               <li>
                 <span>Email</span>
-                <span id="infoEmail">-</span>
+                <span id="infoEmail" class="info-value">-</span>
               </li>
               <li>
                 <span>Họ Tên</span>
-                <span id="infoName">-</span>
+                <span id="infoName" class="info-value">-</span>
               </li>
               <li>
                 <span>Ngày Tham Gia</span>
-                <span id="infoJoined">-</span>
+                <span id="infoJoined" class="info-value">-</span>
+              </li>
+              <li>
+                <span>ID Người Dùng</span>
+                <span id="infoId" class="info-value info-id">-</span>
               </li>
             </ul>
+          </div>
+        </div>
+
+        <!-- Account Status Card -->
+        <div class="profile-panel" style="margin-top: 18px;">
+          <h3 class="panel-title"><i class="fas fa-shield-alt"></i> Trạng Thái Tài Khoản</h3>
+          <div class="account-status">
+            <div class="status-item">
+              <div class="status-icon verified"><i class="fas fa-check-circle"></i></div>
+              <div class="status-info">
+                <p class="status-label">Đã Xác Thực</p>
+                <p class="status-desc">Email đã được xác minh</p>
+              </div>
+            </div>
+            <div class="status-item">
+              <div class="status-icon active"><i class="fas fa-user-check"></i></div>
+              <div class="status-info">
+                <p class="status-label">Tài Khoản Hoạt Động</p>
+                <p class="status-desc">Sẵn sàng để sử dụng</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -268,9 +313,9 @@
 
   <div class="toast" id="toast"></div>
 
-  <script src="script/auth.js"></script>
   <script src="script/config.js"></script>
   <script src="script/api.js"></script>
+  <script src="script/auth.js"></script>
   <script src="script/profile.js"></script>
 </body>
 </html>

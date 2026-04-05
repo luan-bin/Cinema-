@@ -57,11 +57,19 @@ function initNavbar() {
    AUTH — kiểm tra đăng nhập, hiển thị thông tin user
 ══════════════════════════════════════════════ */
 function initAuth() {
-  if (!window.CinemaAuth) return;
+  console.log("[initAuth] Start...");
+  
+  if (!window.CinemaAuth) {
+    console.error("[initAuth] CinemaAuth not found!");
+    return;
+  }
+  
   const session = CinemaAuth.getSession();
+  console.log("[initAuth] Session:", session);
 
   // ── Chưa đăng nhập → hiện banner yêu cầu đăng nhập ──
   if (!session || !CinemaAuth.isLoggedIn()) {
+    console.log("[initAuth] Not logged in");
     const hero    = document.getElementById("profileHero");
     const content = document.querySelector(".profile-content");
 
@@ -85,12 +93,13 @@ function initAuth() {
         </div>`;
     }
     if (content) content.innerHTML = "";
-    showToast?.("Vui lòng đăng nhập để truy cập hồ sơ.");
     return;
   }
 
+  console.log("[initAuth] User logged in, filling info...");
+
   // ── Đã đăng nhập → điền thông tin ──
-  const { firstName, lastName, email, createdAt, avatar } = session.user;
+  const { firstName, lastName, email, createdAt, avatar, id } = session.user;
   const fullName    = `${firstName} ${lastName}`;
   const initials    = `${firstName[0]}${lastName[0]}`.toUpperCase();
   const avatarSrc   = avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`;
@@ -115,13 +124,45 @@ function initAuth() {
     setTimeout(() => (window.location.href = "login.html"), 1000);
   });
 
-  // Profile hero section
-  document.getElementById("profileAvatar").src         = avatarSrc;
-  document.getElementById("profileName").textContent    = fullName;
-  document.getElementById("profileEmail").textContent   = email;
+  // Profile hero section - thông tin chi tiết
+  const profileAvatar = document.getElementById("profileAvatar");
+  if (profileAvatar) profileAvatar.src = avatarSrc;
+  
+  const profileName = document.getElementById("profileName");
+  if (profileName) profileName.textContent = fullName;
+  
+  const profileEmail = document.getElementById("profileEmail");
+  if (profileEmail) profileEmail.textContent = email;
+  
+  // Hiển thị badge (Member)
+  const profileBadge = document.getElementById("profileBadge");
+  if (profileBadge) {
+    const daysOld = createdAt ? Math.floor((Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24)) : 0;
+    const badgeName = daysOld > 365 ? "Loyal Member" : daysOld > 30 ? "Active Member" : "Member";
+    profileBadge.textContent = badgeName;
+  }
+
+  // Show user ID element
+  const profileIdEl = document.getElementById("profileId");
+  const profileIdValueEl = document.getElementById("profileIdValue");
+  if (profileIdEl && profileIdValueEl) {
+    profileIdEl.style.display = "inline-flex";
+    profileIdValueEl.textContent = id ? id.substring(0, 12) : "N/A";
+  }
+
+  // Show edit profile button
+  const editBtn = document.getElementById("editProfileBtn");
+  if (editBtn) {
+    editBtn.style.display = "inline-flex";
+    editBtn.addEventListener("click", () => switchSection("settings"));
+    editBtn.style.maxWidth = "100%";
+  }
+
+  // Info panel
   document.getElementById("infoEmail").textContent      = email;
   document.getElementById("infoName").textContent       = fullName;
   document.getElementById("infoJoined").textContent     = joinedText;
+  document.getElementById("infoId").textContent         = id ? id.substring(0, 20) + "..." : "N/A";
   document.getElementById("profileSince").innerHTML     = `<i class="fas fa-clock"></i> Thành viên từ ${joinedText}`;
 
   // Pre-fill settings form
@@ -222,8 +263,13 @@ async function loadCollections() {
   document.getElementById("statFavorites").textContent = profileState.favoriteIds.length;
 
   const total = profileState.watchlistIds.length + profileState.favoriteIds.length;
+  
+  // Update statTotal element
+  const statTotal = document.getElementById("statTotal");
+  if (statTotal) statTotal.textContent = total;
+  
   document.getElementById("profileStats").innerHTML =
-    `<i class="fas fa-film"></i> ${total} phim trong thư viện`;
+    `<i class="fas fa-film"></i> ${total} phim`;
 
   // Tải song song cả hai danh sách
   await Promise.all([loadList("watchlist"), loadList("favorites")]);
@@ -313,12 +359,39 @@ function initProfileForm() {
    INIT
 ══════════════════════════════════════════════ */
 async function init() {
+  // Debug info
+  console.log("=== PROFILE PAGE INIT ===");
+  console.log("CinemaAuth available?", !!window.CinemaAuth);
+  
+  // Direct localStorage check
+  const rawSession = localStorage.getItem("cinema_session");
+  console.log("Raw localStorage session:", rawSession ? "EXISTS" : "NOT FOUND");
+  if (rawSession) {
+    try {
+      const session = JSON.parse(rawSession);
+      console.log("Parsed session user:", session.user?.firstName, session.user?.email);
+    } catch (e) {
+      console.error("Session parse error:", e);
+    }
+  }
+  
+  console.log("CinemaAuth.isLoggedIn():", window.CinemaAuth?.isLoggedIn());
+  
   initNavbar();
   initSearch();
   initAuth();
   initTabs();
   initProfileForm();
   await loadCollections();
+  
+  // Re-check auth when tab becomes visible (user might have logged in on another tab)
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      console.log("[Profile] Tab visible, checking auth...");
+      initAuth();
+      loadCollections();
+    }
+  });
 }
 
 document.addEventListener("DOMContentLoaded", init);

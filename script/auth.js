@@ -1,168 +1,278 @@
 /* ══════════════════════════════════════════════
-   ECLIPSE CINEMA — config.js
-   Shared configuration — import vào mọi page
-   Thứ tự load: config.js → api.js → auth.js → [page].js
+   ECLIPSE CINEMA — auth.js
+   Quản lý đăng nhập, đăng ký, session người dùng
+   Lưu trữ: localStorage (demo)
 ══════════════════════════════════════════════ */
 
-const ECLIPSE_CONFIG = {
-  // ─── TMDB API ────────────────────────────────
-  API_KEY:     "ef29fa7a978b4e6593665f37c7b9110c",
-  BASE_URL:    "https://api.themoviedb.org/3",
-  IMG_BASE:    "https://image.tmdb.org/t/p",
-  LANG:        "vi-VN",
-  REGION:      "VN",
+const CinemaAuth = (() => {
+  const USERS_KEY    = "cinema_users";      // Danh sách người dùng đã đăng ký
+  const SESSION_KEY  = "cinema_session";    // Session hiện tại
+  const REMEMBERED_KEY = "cinema_remembered"; // "Remember me" email
 
-  // ─── Kích thước ảnh (TMDB size tokens) ────────
-  POSTER_SM:   "w185",
-  POSTER_MD:   "w342",   // default cho card
-  POSTER_LG:   "w500",
-  BACKDROP_MD: "w780",
-  BACKDROP_LG: "w1280",  // default cho hero/detail
-  PROFILE_SM:  "w185",   // ảnh diễn viên
+  /* ──────────────────────────────────────────
+     PRIVATE HELPERS
+  ────────────────────────────────────────── */
 
-  // ─── Embed servers (stream phim) ──────────────
-  // Thêm/bớt object trong mảng để quản lý tập trung
-  SERVERS: [
-    { name: "Server 1", icon: "fa-circle-play", url: (id) => `https://www.2embed.cc/embed/${id}` },
-    { name: "Server 2", icon: "fa-circle-play", url: (id) => `https://vidsrc.to/embed/movie/${id}` },
-    { name: "Server 3", icon: "fa-circle-play", url: (id) => `https://multiembed.mov/?video_id=${id}&tmdb=1` },
-  ],
-
-  // ─── App meta ──────────────────────────────────
-  APP_NAME: "Eclipse Cinema",
-  SITE_URL: "",  // Điền domain khi deploy, vd: "https://eclipse.cinema"
-};
-
-/* ──────────────────────────────────────────────
-   IMAGE HELPERS
-   Tạo full URL ảnh từ path trả về bởi TMDB
-────────────────────────────────────────────── */
-
-/** Base builder — dùng nội bộ */
-const imgUrl = (path, size) =>
-  path ? `${ECLIPSE_CONFIG.IMG_BASE}/${size}${path}` : null;
-
-/** Poster phim — fallback placeholder nếu không có ảnh */
-const posterUrl = (path, size = ECLIPSE_CONFIG.POSTER_MD) =>
-  imgUrl(path, size) || "https://via.placeholder.com/342x513/161616/888?text=N%2FA";
-
-/** Backdrop (ảnh ngang) — trả về chuỗi rỗng nếu không có */
-const backdropUrl = (path, size = ECLIPSE_CONFIG.BACKDROP_LG) =>
-  imgUrl(path, size) || "";
-
-/** Ảnh profile diễn viên/crew */
-const profileUrl = (path, size = ECLIPSE_CONFIG.PROFILE_SM) =>
-  imgUrl(path, size) || "https://via.placeholder.com/185x278/161616/888?text=N%2FA";
-
-/* ──────────────────────────────────────────────
-   FORMAT HELPERS
-   Chuyển đổi dữ liệu thô TMDB → chuỗi hiển thị
-────────────────────────────────────────────── */
-
-/** Lấy năm từ chuỗi ngày "YYYY-MM-DD" → "YYYY" */
-const releaseYear = (dateStr) =>
-  dateStr ? dateStr.slice(0, 4) : "N/A";
-
-/** Format ngày theo locale Việt Nam */
-const formatDate = (dateStr) => {
-  if (!dateStr) return "N/A";
-  try {
-    return new Date(dateStr).toLocaleDateString("vi-VN", {
-      day: "2-digit", month: "2-digit", year: "numeric",
-    });
-  } catch {
-    return dateStr; // trả nguyên nếu parse lỗi
+  /** Hash mật khẩu (demo — không an toàn thực tế) */
+  function hashPassword(pwd) {
+    let hash = 0;
+    for (let i = 0; i < pwd.length; i++) {
+      const char = pwd.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit
+    }
+    return "hash_" + Math.abs(hash).toString(36);
   }
-};
 
-/** Chuyển phút → "Xg Yp" (vd: 148 → "2g 28p") */
-const formatRuntime = (minutes) => {
-  if (!minutes) return "N/A";
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h ? `${h}g ${m}p` : `${m} phút`;
-};
-
-/** Format số tiền USD → "$123.4M", "$1.23B" v.v. */
-const formatMoney = (n) => {
-  if (!n || n === 0) return "Chưa công bố";
-  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000)     return `$${(n / 1_000_000).toFixed(1)}M`;
-  return `$${n.toLocaleString()}`;
-};
-
-/** Chuyển điểm 0–10 → chuỗi sao ★★★☆☆ (5 sao) */
-const starRating = (score) => {
-  const n = Math.round(score / 2); // 10 điểm → 5 sao
-  return "★".repeat(n) + "☆".repeat(5 - n);
-};
-
-/** Escape nháy đơn/kép trong title để nhúng vào HTML attribute */
-const escapeTitle = (title) =>
-  (title || "").replace(/'/g, "\\'").replace(/"/g, "&quot;");
-
-/** Escape HTML entities để tránh XSS */
-const escapeHtml = (s) =>
-  (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-/** "X phút/giờ/ngày trước" từ timestamp (ms) */
-const timeAgo = (timestamp) => {
-  const diff = Date.now() - timestamp;
-  const periods = [
-    [365 * 24 * 60 * 60 * 1000, "năm"],
-    [30  * 24 * 60 * 60 * 1000, "tháng"],
-    [7   * 24 * 60 * 60 * 1000, "tuần"],
-    [     24 * 60 * 60 * 1000,  "ngày"],
-    [          60 * 60 * 1000,  "giờ"],
-    [               60 * 1000,  "phút"],
-  ];
-  for (const [ms, label] of periods) {
-    if (diff >= ms) return `${Math.floor(diff / ms)} ${label} trước`;
+  /** Validate email format */
+  function isValidEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   }
-  return "Vừa xong";
-};
 
-/* ──────────────────────────────────────────────
-   TOAST NOTIFICATION
-   Hiển thị thông báo góc dưới phải, tự ẩn sau 3s
-   Yêu cầu: element #toast trong HTML
-────────────────────────────────────────────── */
-let _toastTimer;
+  /** Lấy danh sách người dùng từ localStorage */
+  function getAllUsers() {
+    try {
+      return JSON.parse(localStorage.getItem(USERS_KEY) || "[]");
+    } catch {
+      return [];
+    }
+  }
 
-const showToast = (msg) => {
-  const el = document.getElementById("toast");
-  if (!el) return;
-  el.textContent = msg;
-  el.classList.add("show");
-  clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => el.classList.remove("show"), 3000);
-};
+  /** Lưu danh sách người dùng */
+  function saveAllUsers(users) {
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  }
 
-/* ──────────────────────────────────────────────
-   LOCAL STORAGE HELPERS
-   Quản lý Watchlist & Favorites dưới dạng mảng ID
-   Keys: "cineverse_watchlist", "cineverse_favorites"
-────────────────────────────────────────────── */
-const Storage = {
-  /** Đọc mảng từ localStorage (trả [] nếu chưa có) */
-  get: (key) => JSON.parse(localStorage.getItem(key) || "[]"),
+  /* ──────────────────────────────────────────
+     PUBLIC API
+  ────────────────────────────────────────── */
 
-  /** Ghi mảng vào localStorage */
-  set: (key, val) => localStorage.setItem(key, JSON.stringify(val)),
+  return {
+    /**
+     * Đăng ký tài khoản mới
+     * @param {string} firstName 
+     * @param {string} lastName 
+     * @param {string} email 
+     * @param {string} password 
+     * @returns {object} {success: bool, message: string}
+     */
+    register: function (firstName, lastName, email, password) {
+      // Validate input
+      if (!firstName?.trim()) {
+        return { success: false, message: "Vui lòng nhập tên." };
+      }
+      if (!lastName?.trim()) {
+        return { success: false, message: "Vui lòng nhập họ." };
+      }
+      if (!isValidEmail(email)) {
+        return { success: false, message: "Email không hợp lệ." };
+      }
+      if (!password || password.length < 8) {
+        return { success: false, message: "Mật khẩu tối thiểu 8 ký tự." };
+      }
 
-  /**
-   * Toggle một ID trong mảng
-   * @returns {boolean} true = đã thêm | false = đã xóa
-   */
-  toggle: (key, id) => {
-    const list = Storage.get(key);
-    const idx  = list.indexOf(id);
-    if (idx === -1) list.push(id);
-    else list.splice(idx, 1);
-    Storage.set(key, list);
-    return idx === -1;
-  },
+      // Check email already exists
+      const users = getAllUsers();
+      if (users.some(u => u.email.toLowerCase() === email.toLowerCase())) {
+        return { success: false, message: "Email này đã được đăng ký." };
+      }
 
-  /** Kiểm tra ID có trong danh sách không */
-  has: (key, id) => Storage.get(key).includes(id),
-};
+      // Create new user
+      const newUser = {
+        id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.toLowerCase(),
+        passwordHash: hashPassword(password),
+        avatar: null,
+        createdAt: new Date().toISOString(),
+        watchlist: [],
+        favorites: [],
+      };
+
+      users.push(newUser);
+      saveAllUsers(users);
+
+      return { success: true, message: "Đăng ký thành công!" };
+    },
+
+    /**
+     * Đăng nhập
+     * @param {string} email 
+     * @param {string} password 
+     * @param {boolean} rememberMe 
+     * @returns {object} {success: bool, message: string}
+     */
+    login: function (email, password, rememberMe = false) {
+      // Validate input
+      if (!isValidEmail(email)) {
+        return { success: false, message: "Email không hợp lệ." };
+      }
+      if (!password) {
+        return { success: false, message: "Vui lòng nhập mật khẩu." };
+      }
+
+      // Find user
+      const users = getAllUsers();
+      const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+
+      if (!user) {
+        return { success: false, message: "Email không tồn tại." };
+      }
+
+      // Check password
+      if (user.passwordHash !== hashPassword(password)) {
+        return { success: false, message: "Mật khẩu không đúng." };
+      }
+
+      // Create session (exclude passwordHash)
+      const { passwordHash, ...userInfo } = user;
+      const session = {
+        user: userInfo,
+        loginTime: Date.now(),
+        expiresAt: Date.now() + (30 * 24 * 60 * 60 * 1000), // 30 days
+      };
+
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+      // Remember email if checked
+      if (rememberMe) {
+        localStorage.setItem(REMEMBERED_KEY, JSON.stringify({ email }));
+      } else {
+        localStorage.removeItem(REMEMBERED_KEY);
+      }
+
+      return { success: true, message: "Đăng nhập thành công!" };
+    },
+
+    /**
+     * Kiểm tra người dùng đã đăng nhập
+     * @returns {boolean}
+     */
+    isLoggedIn: function () {
+      try {
+        const session = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+        if (!session) return false;
+        // Check session not expired
+        if (session.expiresAt && Date.now() > session.expiresAt) {
+          this.logout();
+          return false;
+        }
+        return true;
+      } catch {
+        return false;
+      }
+    },
+
+    /**
+     * Lấy thông tin session hiện tại
+     * @returns {object|null}
+     */
+    getSession: function () {
+      try {
+        const session = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
+        if (!session) return null;
+        if (session.expiresAt && Date.now() > session.expiresAt) {
+          this.logout();
+          return null;
+        }
+        return session;
+      } catch {
+        return null;
+      }
+    },
+
+    /**
+     * Lấy thông tin người dùng hiện tại
+     * @returns {object|null}
+     */
+    getUser: function () {
+      const session = this.getSession();
+      return session?.user || null;
+    },
+
+    /**
+     * Lấy email đã "Remember me"
+     * @returns {object|null} {email: string}
+     */
+    getRemembered: function () {
+      try {
+        return JSON.parse(localStorage.getItem(REMEMBERED_KEY) || "null");
+      } catch {
+        return null;
+      }
+    },
+
+    /**
+     * Cập nhật thông tin người dùng
+     * @param {object} updates - chỉ cập nhật firstName, lastName, avatar
+     * @returns {object} {success: bool, message: string}
+     */
+    updateProfile: function (updates) {
+      const session = this.getSession();
+      if (!session) {
+        return { success: false, message: "Chưa đăng nhập." };
+      }
+
+      const { firstName, lastName, avatar } = updates;
+
+      // Validate
+      if (firstName !== undefined && !firstName.trim()) {
+        return { success: false, message: "Tên không được trống." };
+      }
+      if (lastName !== undefined && !lastName.trim()) {
+        return { success: false, message: "Họ không được trống." };
+      }
+
+      // Update user
+      const users = getAllUsers();
+      const userIdx = users.findIndex(u => u.id === session.user.id);
+      if (userIdx === -1) {
+        return { success: false, message: "Không tìm thấy người dùng." };
+      }
+
+      if (firstName !== undefined) users[userIdx].firstName = firstName.trim();
+      if (lastName !== undefined) users[userIdx].lastName = lastName.trim();
+      if (avatar !== undefined) users[userIdx].avatar = avatar;
+
+      saveAllUsers(users);
+
+      // Update session
+      const { passwordHash, ...userInfo } = users[userIdx];
+      session.user = userInfo;
+      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+
+      return { success: true, message: "Cập nhật thành công!" };
+    },
+
+    /**
+     * Đăng xuất
+     */
+    logout: function () {
+      localStorage.removeItem(SESSION_KEY);
+      return { success: true, message: "Đã đăng xuất." };
+    },
+
+    /**
+     * Xóa tất cả session (reset app — dùng debug)
+     */
+    _resetAll: function () {
+      localStorage.removeItem(USERS_KEY);
+      localStorage.removeItem(SESSION_KEY);
+      localStorage.removeItem(REMEMBERED_KEY);
+      console.log("🔄 Auth data cleared");
+    },
+
+    /**
+     * Xem danh sách tất cả người dùng (debug)
+     */
+    _getAllUsers: function () {
+      return getAllUsers();
+    },
+  };
+})();
+
+// ─── Expose globally ───
+window.CinemaAuth = CinemaAuth;
+
+console.log("✓ CinemaAuth loaded");
