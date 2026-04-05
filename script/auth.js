@@ -1,211 +1,168 @@
-/* ===========================
-   ECLIPSE CINEMA — auth-storage.js
-   LocalStorage Manager
-   =========================== */
+/* ══════════════════════════════════════════════
+   ECLIPSE CINEMA — config.js
+   Shared configuration — import vào mọi page
+   Thứ tự load: config.js → api.js → auth.js → [page].js
+══════════════════════════════════════════════ */
 
-(function (global) {
-  'use strict';
+const ECLIPSE_CONFIG = {
+  // ─── TMDB API ────────────────────────────────
+  API_KEY:     "ef29fa7a978b4e6593665f37c7b9110c",
+  BASE_URL:    "https://api.themoviedb.org/3",
+  IMG_BASE:    "https://image.tmdb.org/t/p",
+  LANG:        "vi-VN",
+  REGION:      "VN",
 
-  const KEYS = {
-    USERS:    'eclipseCinema_users',
-    SESSION:  'eclipseCinema_session',
-    REMEMBER: 'eclipseCinema_remember',
-  };
+  // ─── Kích thước ảnh (TMDB size tokens) ────────
+  POSTER_SM:   "w185",
+  POSTER_MD:   "w342",   // default cho card
+  POSTER_LG:   "w500",
+  BACKDROP_MD: "w780",
+  BACKDROP_LG: "w1280",  // default cho hero/detail
+  PROFILE_SM:  "w185",   // ảnh diễn viên
 
-  /* ── Helpers ── */
+  // ─── Embed servers (stream phim) ──────────────
+  // Thêm/bớt object trong mảng để quản lý tập trung
+  SERVERS: [
+    { name: "Server 1", icon: "fa-circle-play", url: (id) => `https://www.2embed.cc/embed/${id}` },
+    { name: "Server 2", icon: "fa-circle-play", url: (id) => `https://vidsrc.to/embed/movie/${id}` },
+    { name: "Server 3", icon: "fa-circle-play", url: (id) => `https://multiembed.mov/?video_id=${id}&tmdb=1` },
+  ],
 
-  /** Lấy toàn bộ danh sách users từ localStorage */
-  function getUsers() {
-    try {
-      return JSON.parse(localStorage.getItem(KEYS.USERS)) || [];
-    } catch {
-      return [];
-    }
+  // ─── App meta ──────────────────────────────────
+  APP_NAME: "Eclipse Cinema",
+  SITE_URL: "",  // Điền domain khi deploy, vd: "https://eclipse.cinema"
+};
+
+/* ──────────────────────────────────────────────
+   IMAGE HELPERS
+   Tạo full URL ảnh từ path trả về bởi TMDB
+────────────────────────────────────────────── */
+
+/** Base builder — dùng nội bộ */
+const imgUrl = (path, size) =>
+  path ? `${ECLIPSE_CONFIG.IMG_BASE}/${size}${path}` : null;
+
+/** Poster phim — fallback placeholder nếu không có ảnh */
+const posterUrl = (path, size = ECLIPSE_CONFIG.POSTER_MD) =>
+  imgUrl(path, size) || "https://via.placeholder.com/342x513/161616/888?text=N%2FA";
+
+/** Backdrop (ảnh ngang) — trả về chuỗi rỗng nếu không có */
+const backdropUrl = (path, size = ECLIPSE_CONFIG.BACKDROP_LG) =>
+  imgUrl(path, size) || "";
+
+/** Ảnh profile diễn viên/crew */
+const profileUrl = (path, size = ECLIPSE_CONFIG.PROFILE_SM) =>
+  imgUrl(path, size) || "https://via.placeholder.com/185x278/161616/888?text=N%2FA";
+
+/* ──────────────────────────────────────────────
+   FORMAT HELPERS
+   Chuyển đổi dữ liệu thô TMDB → chuỗi hiển thị
+────────────────────────────────────────────── */
+
+/** Lấy năm từ chuỗi ngày "YYYY-MM-DD" → "YYYY" */
+const releaseYear = (dateStr) =>
+  dateStr ? dateStr.slice(0, 4) : "N/A";
+
+/** Format ngày theo locale Việt Nam */
+const formatDate = (dateStr) => {
+  if (!dateStr) return "N/A";
+  try {
+    return new Date(dateStr).toLocaleDateString("vi-VN", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+    });
+  } catch {
+    return dateStr; // trả nguyên nếu parse lỗi
   }
+};
 
-  /** Lưu danh sách users vào localStorage */
-  function saveUsers(users) {
-    localStorage.setItem(KEYS.USERS, JSON.stringify(users));
+/** Chuyển phút → "Xg Yp" (vd: 148 → "2g 28p") */
+const formatRuntime = (minutes) => {
+  if (!minutes) return "N/A";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h ? `${h}g ${m}p` : `${m} phút`;
+};
+
+/** Format số tiền USD → "$123.4M", "$1.23B" v.v. */
+const formatMoney = (n) => {
+  if (!n || n === 0) return "Chưa công bố";
+  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}B`;
+  if (n >= 1_000_000)     return `$${(n / 1_000_000).toFixed(1)}M`;
+  return `$${n.toLocaleString()}`;
+};
+
+/** Chuyển điểm 0–10 → chuỗi sao ★★★☆☆ (5 sao) */
+const starRating = (score) => {
+  const n = Math.round(score / 2); // 10 điểm → 5 sao
+  return "★".repeat(n) + "☆".repeat(5 - n);
+};
+
+/** Escape nháy đơn/kép trong title để nhúng vào HTML attribute */
+const escapeTitle = (title) =>
+  (title || "").replace(/'/g, "\\'").replace(/"/g, "&quot;");
+
+/** Escape HTML entities để tránh XSS */
+const escapeHtml = (s) =>
+  (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** "X phút/giờ/ngày trước" từ timestamp (ms) */
+const timeAgo = (timestamp) => {
+  const diff = Date.now() - timestamp;
+  const periods = [
+    [365 * 24 * 60 * 60 * 1000, "năm"],
+    [30  * 24 * 60 * 60 * 1000, "tháng"],
+    [7   * 24 * 60 * 60 * 1000, "tuần"],
+    [     24 * 60 * 60 * 1000,  "ngày"],
+    [          60 * 60 * 1000,  "giờ"],
+    [               60 * 1000,  "phút"],
+  ];
+  for (const [ms, label] of periods) {
+    if (diff >= ms) return `${Math.floor(diff / ms)} ${label} trước`;
   }
+  return "Vừa xong";
+};
 
-  /** Tạo ID ngẫu nhiên cho user */
-  function generateId() {
-    return 'u_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  }
+/* ──────────────────────────────────────────────
+   TOAST NOTIFICATION
+   Hiển thị thông báo góc dưới phải, tự ẩn sau 3s
+   Yêu cầu: element #toast trong HTML
+────────────────────────────────────────────── */
+let _toastTimer;
 
-  /** Hash đơn giản (demo) — production nên dùng bcrypt phía server */
-  function simpleHash(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const chr = str.charCodeAt(i);
-      hash = ((hash << 5) - hash) + chr;
-      hash |= 0;
-    }
-    return 'h_' + Math.abs(hash).toString(16);
-  }
+const showToast = (msg) => {
+  const el = document.getElementById("toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove("show"), 3000);
+};
 
-  /* ── Auth API ── */
+/* ──────────────────────────────────────────────
+   LOCAL STORAGE HELPERS
+   Quản lý Watchlist & Favorites dưới dạng mảng ID
+   Keys: "cineverse_watchlist", "cineverse_favorites"
+────────────────────────────────────────────── */
+const Storage = {
+  /** Đọc mảng từ localStorage (trả [] nếu chưa có) */
+  get: (key) => JSON.parse(localStorage.getItem(key) || "[]"),
+
+  /** Ghi mảng vào localStorage */
+  set: (key, val) => localStorage.setItem(key, JSON.stringify(val)),
 
   /**
-   * Đăng ký tài khoản mới
-   * @param {{ firstName, lastName, email, password }} data
-   * @returns {{ success: boolean, message: string, user?: object }}
+   * Toggle một ID trong mảng
+   * @returns {boolean} true = đã thêm | false = đã xóa
    */
-  function register({ firstName, lastName, email, password }) {
-    const users = getUsers();
-    const normalizedEmail = email.trim().toLowerCase();
+  toggle: (key, id) => {
+    const list = Storage.get(key);
+    const idx  = list.indexOf(id);
+    if (idx === -1) list.push(id);
+    else list.splice(idx, 1);
+    Storage.set(key, list);
+    return idx === -1;
+  },
 
-    // Kiểm tra email đã tồn tại
-    if (users.find(u => u.email === normalizedEmail)) {
-      return { success: false, message: 'Email này đã được đăng ký.' };
-    }
-
-    const newUser = {
-      id:        generateId(),
-      firstName: firstName.trim(),
-      lastName:  lastName.trim(),
-      email:     normalizedEmail,
-      password:  simpleHash(password),
-      createdAt: new Date().toISOString(),
-      avatar:    null,
-    };
-
-    users.push(newUser);
-    saveUsers(users);
-
-    // Tự động đăng nhập sau khi đăng ký
-    const { password: _, ...safeUser } = newUser;
-    _createSession(safeUser, false);
-
-    return { success: true, message: 'Tài khoản đã được tạo!', user: safeUser };
-  }
-
-  /**
-   * Đăng nhập
-   * @param {{ email, password, remember }} data
-   * @returns {{ success: boolean, message: string, user?: object }}
-   */
-  function login({ email, password, remember = false }) {
-    const users = getUsers();
-    const normalizedEmail = email.trim().toLowerCase();
-    const user = users.find(u => u.email === normalizedEmail);
-
-    if (!user) {
-      return { success: false, message: 'Email không tồn tại.' };
-    }
-    if (user.password !== simpleHash(password)) {
-      return { success: false, message: 'Mật khẩu không đúng.' };
-    }
-
-    const { password: _, ...safeUser } = user;
-    _createSession(safeUser, remember);
-
-    return { success: true, message: 'Đăng nhập thành công!', user: safeUser };
-  }
-
-  /** Đăng xuất — xóa session */
-  function logout() {
-    localStorage.removeItem(KEYS.SESSION);
-    localStorage.removeItem(KEYS.REMEMBER);
-  }
-
-  /**
-   * Lấy session hiện tại (nếu còn hạn)
-   * @returns {object|null}
-   */
-  function getSession() {
-    try {
-      const raw = localStorage.getItem(KEYS.SESSION);
-      if (!raw) return null;
-      const session = JSON.parse(raw);
-
-      // Kiểm tra hết hạn
-      if (session.expiresAt && Date.now() > session.expiresAt) {
-        logout();
-        return null;
-      }
-      return session;
-    } catch {
-      return null;
-    }
-  }
-
-  /** Kiểm tra đã đăng nhập chưa */
-  function isLoggedIn() {
-    return getSession() !== null;
-  }
-
-  /**
-   * Lấy thông tin "remember me" để điền sẵn form
-   * @returns {{ email: string }|null}
-   */
-  function getRemembered() {
-    try {
-      return JSON.parse(localStorage.getItem(KEYS.REMEMBER)) || null;
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Cập nhật thông tin profile cơ bản cho user hiện tại
-   * @param {{ firstName?: string, lastName?: string, avatar?: string }} updates
-   * @returns {{ success: boolean, message: string, user?: object }}
-   */
-  function updateProfile(updates) {
-    const session = getSession();
-    if (!session || !session.user) {
-      return { success: false, message: 'Bạn chưa đăng nhập.' };
-    }
-
-    const users = getUsers();
-    const idx = users.findIndex((u) => u.id === session.user.id);
-    if (idx === -1) {
-      return { success: false, message: 'Không tìm thấy tài khoản.' };
-    }
-
-    const user = users[idx];
-    if (typeof updates.firstName === 'string' && updates.firstName.trim()) {
-      user.firstName = updates.firstName.trim();
-    }
-    if (typeof updates.lastName === 'string' && updates.lastName.trim()) {
-      user.lastName = updates.lastName.trim();
-    }
-    if (typeof updates.avatar === 'string') {
-      user.avatar = updates.avatar.trim() || null;
-    }
-
-    users[idx] = user;
-    saveUsers(users);
-
-    const { password: _, ...safeUser } = user;
-    _createSession(safeUser, false);
-
-    return { success: true, message: 'Đã cập nhật hồ sơ.', user: safeUser };
-  }
-
-  /* ── Private ── */
-
-  function _createSession(user, remember) {
-    const SESSION_DURATION = remember
-      ? 30 * 24 * 60 * 60 * 1000   // 30 ngày
-      :       24 * 60 * 60 * 1000;  // 1 ngày
-
-    const session = {
-      user,
-      createdAt: new Date().toISOString(),
-      expiresAt: Date.now() + SESSION_DURATION,
-    };
-    localStorage.setItem(KEYS.SESSION, JSON.stringify(session));
-
-    if (remember) {
-      localStorage.setItem(KEYS.REMEMBER, JSON.stringify({ email: user.email }));
-    } else {
-      localStorage.removeItem(KEYS.REMEMBER);
-    }
-  }
-
-  /* ── Export ── */
-  global.CinemaAuth = { register, login, logout, getSession, isLoggedIn, getRemembered, updateProfile };
-
-})(window);
+  /** Kiểm tra ID có trong danh sách không */
+  has: (key, id) => Storage.get(key).includes(id),
+};

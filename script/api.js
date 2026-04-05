@@ -1,20 +1,35 @@
 /* ══════════════════════════════════════════════
    ECLIPSE CINEMA — api.js
-   TMDB API wrapper, tách riêng khỏi config.js
+   TMDB API wrapper — tách riêng khỏi config.js
+   Phụ thuộc: config.js (load trước)
 ══════════════════════════════════════════════ */
 
+/**
+ * Gọi TMDB API với endpoint và params tùy chọn.
+ * Tự động gắn api_key và language từ ECLIPSE_CONFIG.
+ *
+ * @param {string} endpoint  - Đường dẫn TMDB, vd: "/movie/popular"
+ * @param {object} params    - Query params bổ sung, vd: { page: 2 }
+ * @returns {Promise<object|null>} JSON response hoặc null nếu lỗi
+ */
 async function tmdbFetch(endpoint, params = {}) {
+  // Kiểm tra API key trước khi gọi
+  if (!ECLIPSE_CONFIG.API_KEY?.trim()) {
+    console.error("[TMDB] Thiếu API key");
+    showToast?.("Vui lòng thiết lập TMDB API");
+    return null;
+  }
+
+  // Build URL với URLSearchParams
   const url = new URL(`${ECLIPSE_CONFIG.BASE_URL}${endpoint}`);
   url.searchParams.set("api_key", ECLIPSE_CONFIG.API_KEY);
   url.searchParams.set("language", ECLIPSE_CONFIG.LANG);
-  Object.entries(params).forEach(([k, v]) => {
-    if (v || v === 0 || v === false) url.searchParams.set(k, v);
-  });
 
-  if (!ECLIPSE_CONFIG.API_KEY || ECLIPSE_CONFIG.API_KEY.trim() === "") {
-    console.error("[TMDB] missing API key");
-    showToast?.("Vui lòng thiết lập TMDB API key trong config.js");
-    return null;
+  // Gắn các params bổ sung (bỏ qua giá trị null/undefined/chuỗi rỗng)
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== null && v !== undefined && v !== "") {
+      url.searchParams.set(k, v);
+    }
   }
 
   try {
@@ -22,16 +37,26 @@ async function tmdbFetch(endpoint, params = {}) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   } catch (err) {
-    console.error(`[TMDB] ${endpoint}`, err);
-    showToast?.(`Lỗi kết nối đến TMDB: ${err.message}`);
+    console.error(`[TMDB] Lỗi tại ${endpoint}:`, err);
+    showToast?.(`Lỗi kết nối TMDB: ${err.message}`);
     return null;
   }
 }
 
-/* Helper API methods (tuỳ chọn) */
+/* ──────────────────────────────────────────────
+   SHORTHAND METHODS
+   Các endpoint hay dùng, gọi nhanh hơn tmdbFetch
+────────────────────────────────────────────── */
 const EclipseApi = {
+  /** Chi tiết một bộ phim theo ID */
   fetchMovie: (id) => tmdbFetch(`/movie/${id}`),
-  fetchGenreList: () => tmdbFetch(`/genre/movie/list`),
-  searchMovie: (query, page = 1) => tmdbFetch(`/search/movie`, { query, page }),
-  fetchNowPlaying: (region) => tmdbFetch(`/movie/now_playing`, { region }),
+
+  /** Danh sách thể loại */
+  fetchGenreList: () => tmdbFetch("/genre/movie/list"),
+
+  /** Tìm kiếm phim theo từ khóa */
+  searchMovie: (query, page = 1) => tmdbFetch("/search/movie", { query, page }),
+
+  /** Phim đang chiếu (có thể lọc theo region) */
+  fetchNowPlaying: (region) => tmdbFetch("/movie/now_playing", { region }),
 };
