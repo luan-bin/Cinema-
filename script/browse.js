@@ -18,6 +18,7 @@ const browseState = {
   isLoading:   false,
   genres:      [], // Danh sách genres từ TMDB
   years:       [], // Danh sách năm từ 2024 về 1900
+  hasMorePages: true, // Flag để kiểm tra còn trang không
 };
 
 /* ══════════════════════════════════════════════
@@ -27,6 +28,9 @@ document.addEventListener("DOMContentLoaded", () => {
   initBrowse();
 });
 
+/**
+ * Khởi tạo trang browse: tải genres, years, phim mặc định và thiết lập event listeners
+ */
 async function initBrowse() {
   // Tải genres và years
   await loadGenres();
@@ -37,11 +41,17 @@ async function initBrowse() {
 
   // Event listeners
   document.getElementById("applyFiltersBtn")?.addEventListener("click", applyFilters);
+
+  // Thêm infinite scroll
+  window.addEventListener("scroll", handleScroll);
 }
 
 /* ══════════════════════════════════════════════
    LOAD GENRES & YEARS
 ══════════════════════════════════════════════ */
+/**
+ * Tải danh sách genres từ TMDB và populate vào select box
+ */
 async function loadGenres() {
   const data = await EclipseApi.fetchGenreList();
   if (!data?.genres) return;
@@ -52,6 +62,9 @@ async function loadGenres() {
     data.genres.map(g => `<option value="${g.id}">${g.name}</option>`).join("");
 }
 
+/**
+ * Tạo danh sách năm từ năm hiện tại về 1900 và populate vào select box
+ */
 function loadYears() {
   const currentYear = new Date().getFullYear();
   const years = [];
@@ -67,12 +80,21 @@ function loadYears() {
 /* ══════════════════════════════════════════════
    LOAD MOVIES
 ══════════════════════════════════════════════ */
-async function loadMovies(page = 1) {
+/**
+ * Tải danh sách phim từ TMDB với các bộ lọc hiện tại
+ * @param {number} page - Trang cần tải (mặc định 1)
+ * @param {boolean} append - Có append vào grid hiện tại hay thay thế (mặc định false)
+ */
+async function loadMovies(page = 1, append = false) {
   if (browseState.isLoading) return;
   browseState.isLoading = true;
 
   const statusEl = document.getElementById("browseStatus");
-  statusEl.textContent = "Đang tải...";
+  if (!append) {
+    statusEl.textContent = "Đang tải...";
+  } else {
+    statusEl.textContent = "Đang tải thêm phim...";
+  }
 
   const params = {
     page,
@@ -95,50 +117,78 @@ async function loadMovies(page = 1) {
 
   browseState.currentPage = data.page;
   browseState.totalPages  = data.total_pages;
+  browseState.hasMorePages = data.page < data.total_pages;
 
-  renderMovies(data.results);
-  updateResultsInfo(data);
+  renderMovies(data.results, append);
+  if (!append) {
+    updateResultsInfo(data);
+  }
 
   statusEl.textContent = "";
   browseState.isLoading = false;
 }
 
+/**
+ * Áp dụng bộ lọc mới và reset về trang 1
+ */
 function applyFilters() {
   browseState.currentPage = 1;
-  loadMovies(1);
+  browseState.hasMorePages = true;
+  loadMovies(1, false);
 }
 
 /* ══════════════════════════════════════════════
    RENDER
 ══════════════════════════════════════════════ */
-function renderMovies(movies) {
+
+/**
+ * Render danh sách phim vào grid
+ * @param {Array} movies - Mảng các object phim từ TMDB
+ * @param {boolean} append - Có append vào grid hay thay thế (mặc định false)
+ */
+function renderMovies(movies, append = false) {
   const grid = document.getElementById("browseGrid");
   if (!grid) return;
 
-  if (!movies?.length) {
-    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--grey)">Không tìm thấy phim nào.</div>';
-    return;
+  if (!append) {
+    if (!movies?.length) {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--grey)">Không tìm thấy phim nào.</div>';
+      return;
+    }
+    grid.innerHTML = "";
   }
 
-  grid.innerHTML = movies.map(m => `
-    <div class="movie-card" onclick="location.href='detail.html?id=${m.id}'">
-      <div class="movie-poster">
-        <img src="${poster(m.poster_path)}" alt="${m.title}" loading="lazy"
-          onerror="this.src='https://via.placeholder.com/342x513/161616/888?text=N%2FA'" />
-        <div class="movie-poster-overlay">
-          <div class="play-btn"><i class="fas fa-play"></i></div>
+  if (movies?.length) {
+    const movieCards = movies.map(m => `
+      <div class="movie-card" onclick="location.href='detail.html?id=${m.id}'">
+        <div class="movie-poster">
+          <img src="${poster(m.poster_path)}" alt="${m.title}" loading="lazy"
+            onerror="this.src='https://via.placeholder.com/342x513/161616/888?text=N%2FA'" />
+          <div class="movie-poster-overlay">
+            <div class="play-btn"><i class="fas fa-play"></i></div>
+          </div>
+          <div class="movie-rating-badge">⭐ ${m.vote_average.toFixed(1)}</div>
         </div>
-        <div class="movie-rating-badge">⭐ ${m.vote_average.toFixed(1)}</div>
-      </div>
-      <div class="movie-info">
-        <p class="movie-title">${m.title}</p>
-        <div class="movie-meta">
-          <span class="movie-year">${year(m.release_date)}</span>
+        <div class="movie-info">
+          <p class="movie-title">${m.title}</p>
+          <div class="movie-meta">
+            <span class="movie-year">${year(m.release_date)}</span>
+          </div>
         </div>
-      </div>
-    </div>`).join("");
+      </div>`).join("");
+
+    if (append) {
+      grid.insertAdjacentHTML("beforeend", movieCards);
+    } else {
+      grid.innerHTML = movieCards;
+    }
+  }
 }
 
+/**
+ * Cập nhật thông tin kết quả tìm kiếm (tiêu đề và số lượng)
+ * @param {Object} data - Response data từ TMDB
+ */
 function updateResultsInfo(data) {
   const titleEl  = document.getElementById("resultsTitle");
   const countEl  = document.getElementById("resultsCount");
@@ -159,5 +209,26 @@ function updateResultsInfo(data) {
 
   if (countEl) {
     countEl.textContent = `${data.total_results.toLocaleString()} phim`;
+  }
+}
+
+/* ══════════════════════════════════════════════
+   INFINITE SCROLL
+══════════════════════════════════════════════ */
+
+/**
+ * Xử lý sự kiện scroll để tải thêm phim khi gần cuối trang
+ * Trigger khi còn 200px đến bottom
+ */
+function handleScroll() {
+  if (browseState.isLoading || !browseState.hasMorePages) return;
+
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+  const windowHeight = window.innerHeight;
+  const documentHeight = document.documentElement.scrollHeight;
+
+  // Load more khi cách bottom còn 200px
+  if (documentHeight - (scrollTop + windowHeight) < 200) {
+    loadMovies(browseState.currentPage + 1, true);
   }
 }

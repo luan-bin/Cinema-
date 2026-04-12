@@ -1,7 +1,12 @@
 /* ══════════════════════════════════════════════
-   ECLIPSE CINEMA — profile.js
+   ECLIPSE CINEMA — profile.js  (FIXED)
    Trang hồ sơ: watchlist, favorites, chỉnh sửa thông tin
    Phụ thuộc: config.js → api.js → auth.js
+
+   CHANGES:
+   [Fix #3] Pagination: hiện 12 phim/lần, có nút "Tải thêm"
+            → Giảm số request TMDB và tránh layout bị dồn dập
+   [Fix #2] Storage user-aware xử lý ở config.js
 ══════════════════════════════════════════════ */
 
 // ─── Alias ngắn ───────────────────────────────
@@ -9,14 +14,25 @@ const tmdb   = tmdbFetch;
 const poster = posterUrl;
 const year   = releaseYear;
 
-/** State: lưu cache mảng ID để tính tổng */
+/* ──────────────────────────────────────────────
+   [FIX #3] PAGINATION CONFIG
+────────────────────────────────────────────── */
+const CARDS_PER_PAGE = 12; // Số phim hiển thị mỗi lần tải
+
+/** State phân trang cho từng danh sách */
+const listPage = {
+  watchlist: 1,
+  favorites: 1,
+};
+
+/** State: cache mảng ID */
 const profileState = {
   watchlistIds: [],
   favoriteIds:  [],
 };
 
 /* ══════════════════════════════════════════════
-   NAVBAR — scroll effect + hamburger + user dropdown
+   NAVBAR
 ══════════════════════════════════════════════ */
 function initNavbar() {
   const navbar    = document.getElementById("navbar");
@@ -36,8 +52,7 @@ function initNavbar() {
     const open = navLinks.classList.contains("open");
     hamburger.querySelectorAll("span").forEach((s, i) => {
       s.style.transform = open
-        ? ["translateY(7px) rotate(45deg)", "", "translateY(-7px) rotate(-45deg)"][i]
-        : "";
+        ? ["translateY(7px) rotate(45deg)", "", "translateY(-7px) rotate(-45deg)"][i] : "";
       if (i === 1) s.style.opacity = open ? "0" : "";
     });
   });
@@ -54,20 +69,23 @@ function initNavbar() {
 }
 
 /* ══════════════════════════════════════════════
-   AUTH — kiểm tra đăng nhập, hiển thị thông tin user
+   AUTH
 ══════════════════════════════════════════════ */
+
+/**
+ * Khởi tạo authentication: kiểm tra đăng nhập, hiển thị profile hoặc redirect
+ */
 function initAuth() {
   console.log("[initAuth] Start...");
-  
+
   if (!window.CinemaAuth) {
     console.error("[initAuth] CinemaAuth not found!");
     return;
   }
-  
+
   const session = CinemaAuth.getSession();
   console.log("[initAuth] Session:", session);
 
-  // ── Chưa đăng nhập → hiện banner yêu cầu đăng nhập ──
   if (!session || !CinemaAuth.isLoggedIn()) {
     console.log("[initAuth] Not logged in");
     const hero    = document.getElementById("profileHero");
@@ -98,16 +116,14 @@ function initAuth() {
 
   console.log("[initAuth] User logged in, filling info...");
 
-  // ── Đã đăng nhập → điền thông tin ──
   const { firstName, lastName, email, createdAt, avatar, id } = session.user;
-  const fullName    = `${firstName} ${lastName}`;
-  const initials    = `${firstName[0]}${lastName[0]}`.toUpperCase();
-  const avatarSrc   = avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`;
-  const joinedText  = createdAt
+  const fullName  = `${firstName} ${lastName}`;
+  const initials  = `${firstName[0]}${lastName[0]}`.toUpperCase();
+  const avatarSrc = avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`;
+  const joinedText = createdAt
     ? (() => { try { return new Date(createdAt).toLocaleDateString("vi-VN"); } catch { return createdAt; } })()
     : "Không rõ";
 
-  // Navbar avatar → initials
   document.getElementById("userAvatarBtn").innerHTML = `
     <div style="width:100%;height:100%;background:var(--red);display:grid;place-items:center;
       font-family:var(--font-cond);font-size:13px;font-weight:700;color:#fff;letter-spacing:1px">
@@ -116,7 +132,6 @@ function initAuth() {
   document.querySelector(".user-name").textContent  = fullName;
   document.querySelector(".user-email").textContent = email;
 
-  // Logout
   document.querySelector(".logout-link")?.addEventListener("click", (e) => {
     e.preventDefault();
     CinemaAuth.logout();
@@ -124,55 +139,47 @@ function initAuth() {
     setTimeout(() => (window.location.href = "login.html"), 1000);
   });
 
-  // Profile hero section - thông tin chi tiết
   const profileAvatar = document.getElementById("profileAvatar");
   if (profileAvatar) profileAvatar.src = avatarSrc;
-  
+
   const profileName = document.getElementById("profileName");
   if (profileName) profileName.textContent = fullName;
-  
+
   const profileEmail = document.getElementById("profileEmail");
   if (profileEmail) profileEmail.textContent = email;
-  
-  // Hiển thị badge (Member)
+
   const profileBadge = document.getElementById("profileBadge");
   if (profileBadge) {
     const daysOld = createdAt ? Math.floor((Date.now() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24)) : 0;
-    const badgeName = daysOld > 365 ? "Loyal Member" : daysOld > 30 ? "Active Member" : "Member";
-    profileBadge.textContent = badgeName;
+    profileBadge.textContent = daysOld > 365 ? "Loyal Member" : daysOld > 30 ? "Active Member" : "Member";
   }
 
-  // Show user ID element
-  const profileIdEl = document.getElementById("profileId");
+  const profileIdEl      = document.getElementById("profileId");
   const profileIdValueEl = document.getElementById("profileIdValue");
   if (profileIdEl && profileIdValueEl) {
-    profileIdEl.style.display = "inline-flex";
+    profileIdEl.style.display  = "inline-flex";
     profileIdValueEl.textContent = id ? id.substring(0, 12) : "N/A";
   }
 
-  // Show edit profile button
   const editBtn = document.getElementById("editProfileBtn");
   if (editBtn) {
     editBtn.style.display = "inline-flex";
     editBtn.addEventListener("click", () => switchSection("settings"));
-    editBtn.style.maxWidth = "100%";
   }
 
-  // Info panel
-  document.getElementById("infoEmail").textContent      = email;
-  document.getElementById("infoName").textContent       = fullName;
-  document.getElementById("infoJoined").textContent     = joinedText;
-  document.getElementById("infoId").textContent         = id ? id.substring(0, 20) + "..." : "N/A";
-  document.getElementById("profileSince").innerHTML     = `<i class="fas fa-clock"></i> Thành viên từ ${joinedText}`;
+  document.getElementById("infoEmail").textContent  = email;
+  document.getElementById("infoName").textContent   = fullName;
+  document.getElementById("infoJoined").textContent = joinedText;
+  document.getElementById("infoId").textContent     = id ? id.substring(0, 20) + "..." : "N/A";
+  document.getElementById("profileSince").innerHTML = `<i class="fas fa-clock"></i> Thành viên từ ${joinedText}`;
 
-  // Pre-fill settings form
-  document.getElementById("firstName").value   = firstName;
-  document.getElementById("lastName").value    = lastName;
-  document.getElementById("avatarUrl").value   = avatar || "";
+  document.getElementById("firstName").value  = firstName;
+  document.getElementById("lastName").value   = lastName;
+  document.getElementById("avatarUrl").value  = avatar || "";
 }
 
 /* ══════════════════════════════════════════════
-   SEARCH — inline dropdown với debounce
+   SEARCH
 ══════════════════════════════════════════════ */
 function initSearch() {
   const btn     = document.getElementById("searchBtn");
@@ -228,8 +235,7 @@ async function _doSearch(query) {
 }
 
 /* ══════════════════════════════════════════════
-   TABS — chuyển giữa Overview / Watchlist / Favorites / Settings
-   Hỗ trợ URL hash (#watchlist, #favorites, v.v.)
+   TABS
 ══════════════════════════════════════════════ */
 function initTabs() {
   document.querySelectorAll(".profile-tab").forEach((tab) =>
@@ -239,7 +245,6 @@ function initTabs() {
     })
   );
 
-  // Đọc hash từ URL khi load (vd: profile.html#favorites)
   const hash = location.hash.replace("#", "");
   if (hash) switchSection(hash);
 }
@@ -252,65 +257,163 @@ function switchSection(sectionId) {
 }
 
 /* ══════════════════════════════════════════════
-   COLLECTIONS — tải watchlist & favorites từ localStorage
+   COLLECTIONS — tải watchlist & favorites
 ══════════════════════════════════════════════ */
 async function loadCollections() {
   profileState.watchlistIds = Storage.get("cineverse_watchlist");
   profileState.favoriteIds  = Storage.get("cineverse_favorites");
 
-  // Cập nhật số lượng stats
   document.getElementById("statWatchlist").textContent = profileState.watchlistIds.length;
   document.getElementById("statFavorites").textContent = profileState.favoriteIds.length;
 
   const total = profileState.watchlistIds.length + profileState.favoriteIds.length;
-  
-  // Update statTotal element
   const statTotal = document.getElementById("statTotal");
   if (statTotal) statTotal.textContent = total;
-  
-  document.getElementById("profileStats").innerHTML =
-    `<i class="fas fa-film"></i> ${total} phim`;
+  document.getElementById("profileStats").innerHTML = `<i class="fas fa-film"></i> ${total} phim`;
 
-  // Tải song song cả hai danh sách
-  await Promise.all([loadList("watchlist"), loadList("favorites")]);
+  // [FIX #3] Reset page counter khi tải lại
+  listPage.watchlist = 1;
+  listPage.favorites = 1;
+
+  await Promise.all([loadList("watchlist", 1), loadList("favorites", 1)]);
 }
 
-/**
- * Tải chi tiết phim cho một danh sách (watchlist hoặc favorites).
- * Gọi TMDB song song cho tất cả ID bằng Promise.all.
- */
-async function loadList(type) {
-  const ids    = type === "watchlist" ? profileState.watchlistIds : profileState.favoriteIds;
-  const gridId = type === "watchlist" ? "watchlistGrid"           : "favoritesGrid";
-  const emptyId = type === "watchlist" ? "watchlistEmpty"         : "favoritesEmpty";
+/* ══════════════════════════════════════════════
+   [FIX #3] LOAD LIST VỚI PAGINATION
+   ─────────────────────────────────────────────
+   - Hiện 12 phim đầu tiên ngay lập tức
+   - Nút "Tải thêm" xuất hiện nếu còn phim
+   - Mỗi lần bấm: gọi TMDB cho 12 phim tiếp theo
+   - Nút tự ẩn khi đã hết phim
+══════════════════════════════════════════════ */
+async function loadList(type, page = 1) {
+  const ids     = type === "watchlist" ? profileState.watchlistIds : profileState.favoriteIds;
+  const gridId  = type === "watchlist" ? "watchlistGrid"           : "favoritesGrid";
+  const emptyId = type === "watchlist" ? "watchlistEmpty"          : "favoritesEmpty";
+  const moreBtnId = `${type}-load-more`;
 
   const grid  = document.getElementById(gridId);
   const empty = document.getElementById(emptyId);
   if (!grid || !empty) return;
 
-  // Danh sách trống
+  // ── Trường hợp danh sách trống ──
   if (!ids.length) {
     empty.style.display = "block";
     grid.innerHTML = "";
+    document.getElementById(moreBtnId)?.remove();
     return;
   }
 
-  // Hiện skeleton trong lúc tải
   empty.style.display = "none";
-  grid.innerHTML = Array(ids.length)
-    .fill('<div class="skeleton skeleton-card"></div>')
-    .join("");
+
+  // ── Cắt ID theo page ──
+  const start   = (page - 1) * CARDS_PER_PAGE;
+  const end     = page * CARDS_PER_PAGE;
+  const pageIds = ids.slice(start, end);
+  const hasMore = end < ids.length; // Còn phim sau trang này?
+
+  // ── Skeleton chỉ ở trang đầu ──
+  if (page === 1) {
+    grid.innerHTML = Array(pageIds.length)
+      .fill('<div class="skeleton skeleton-card"></div>')
+      .join("");
+  } else {
+    // Xóa nút "Tải thêm" cũ trước khi append cards mới
+    document.getElementById(moreBtnId)?.remove();
+
+    // Thêm skeleton cho batch mới ở cuối
+    const skeletonWrap = document.createElement("div");
+    skeletonWrap.id = `${moreBtnId}-skeleton`;
+    skeletonWrap.style.cssText = "display:contents";
+    skeletonWrap.innerHTML = Array(pageIds.length)
+      .fill('<div class="skeleton skeleton-card"></div>')
+      .join("");
+    grid.appendChild(skeletonWrap);
+  }
 
   try {
-    // Gọi API song song
-    const movies = await Promise.all(ids.map((id) => tmdb(`/movie/${id}`)));
-    grid.innerHTML = _renderMovieCards(movies.filter(Boolean));
-  } catch {
-    grid.innerHTML = `<p style="color:var(--grey);font-size:13px;padding:16px 0">Không thể tải danh sách phim.</p>`;
+    // Gọi API song song chỉ cho trang hiện tại
+    const movies = await Promise.all(pageIds.map((id) => tmdb(`/movie/${id}`)));
+    const cards  = _renderMovieCards(movies.filter(Boolean));
+
+    if (page === 1) {
+      grid.innerHTML = cards;
+    } else {
+      // Xóa skeleton batch vừa thêm
+      document.getElementById(`${moreBtnId}-skeleton`)?.remove();
+      grid.insertAdjacentHTML("beforeend", cards);
+    }
+
+    // Stagger animation cho batch mới
+    const allCards = Array.from(grid.querySelectorAll(".movie-card"));
+    const batchStart = (page - 1) * CARDS_PER_PAGE;
+    allCards.slice(batchStart).forEach((card, i) => {
+      Object.assign(card.style, {
+        opacity:    "0",
+        transform:  "translateY(16px)",
+        transition: `opacity 0.35s ease ${i * 0.04}s, transform 0.35s ease ${i * 0.04}s`,
+      });
+      setTimeout(() => Object.assign(card.style, { opacity: "1", transform: "translateY(0)" }), 50 + i * 40);
+    });
+
+    // ── Nút "Tải thêm" ──
+    _renderLoadMoreBtn(type, moreBtnId, hasMore, page, grid);
+
+  } catch (err) {
+    console.error(`[Profile] Lỗi tải ${type}:`, err);
+    document.getElementById(`${moreBtnId}-skeleton`)?.remove();
+
+    if (page === 1) {
+      grid.innerHTML = `<p style="color:var(--grey);font-size:13px;padding:16px 0">Không thể tải danh sách phim.</p>`;
+    } else {
+      grid.insertAdjacentHTML("beforeend",
+        `<p style="color:var(--grey);font-size:13px;grid-column:1/-1;padding:8px 0;text-align:center">
+           Lỗi tải trang ${page}. <a href="#" onclick="loadList('${type}',${page});return false" style="color:var(--red)">Thử lại</a>
+         </p>`
+      );
+    }
   }
 }
 
-/** Tạo HTML cho lưới movie cards */
+/**
+ * [FIX #3] Tạo hoặc xóa nút "Tải thêm" bên dưới grid
+ * Nút được đặt ngoài grid (insertAdjacentElement) để không ảnh hưởng CSS grid
+ */
+function _renderLoadMoreBtn(type, moreBtnId, hasMore, currentPage, grid) {
+  // Xóa nút cũ (nếu có)
+  document.getElementById(moreBtnId)?.remove();
+
+  if (!hasMore) return; // Đã hết phim → không hiện nút
+
+  const remaining = (type === "watchlist" ? profileState.watchlistIds : profileState.favoriteIds).length
+                    - currentPage * CARDS_PER_PAGE;
+
+  const btn = document.createElement("button");
+  btn.id        = moreBtnId;
+  btn.className = "btn-secondary";
+  btn.innerHTML = `<i class="fas fa-plus"></i> Tải thêm <span style="color:var(--grey);font-size:12px;margin-left:4px">(còn ${remaining} phim)</span>`;
+
+  Object.assign(btn.style, {
+    display:       "flex",
+    alignItems:    "center",
+    gap:           "8px",
+    margin:        "20px auto 0",
+    padding:       "12px 28px",
+    cursor:        "pointer",
+  });
+
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Đang tải...`;
+    listPage[type]++;
+    await loadList(type, listPage[type]);
+  };
+
+  // Đặt ngay sau grid
+  grid.insertAdjacentElement("afterend", btn);
+}
+
+/** Tạo HTML cards (dùng nội bộ) */
 function _renderMovieCards(movies) {
   return movies
     .filter((m) => m?.id)
@@ -334,7 +437,7 @@ function _renderMovieCards(movies) {
 }
 
 /* ══════════════════════════════════════════════
-   PROFILE FORM — lưu thay đổi firstName/lastName/avatar
+   PROFILE FORM
 ══════════════════════════════════════════════ */
 function initProfileForm() {
   const form = document.getElementById("profileForm");
@@ -347,10 +450,7 @@ function initProfileForm() {
       lastName:  document.getElementById("lastName").value.trim(),
       avatar:    document.getElementById("avatarUrl").value.trim(),
     });
-
     showToast?.(result.message);
-
-    // Nếu thành công → cập nhật lại giao diện ngay
     if (result.success) initAuth();
   });
 }
@@ -359,11 +459,9 @@ function initProfileForm() {
    INIT
 ══════════════════════════════════════════════ */
 async function init() {
-  // Debug info
   console.log("=== PROFILE PAGE INIT ===");
   console.log("CinemaAuth available?", !!window.CinemaAuth);
-  
-  // Direct localStorage check
+
   const rawSession = localStorage.getItem("cinema_session");
   console.log("Raw localStorage session:", rawSession ? "EXISTS" : "NOT FOUND");
   if (rawSession) {
@@ -374,20 +472,17 @@ async function init() {
       console.error("Session parse error:", e);
     }
   }
-  
-  console.log("CinemaAuth.isLoggedIn():", window.CinemaAuth?.isLoggedIn());
-  
+
   initNavbar();
   initSearch();
   initAuth();
   initTabs();
   initProfileForm();
   await loadCollections();
-  
-  // Re-check auth when tab becomes visible (user might have logged in on another tab)
+
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
-      console.log("[Profile] Tab visible, checking auth...");
+      console.log("[Profile] Tab visible, rechecking...");
       initAuth();
       loadCollections();
     }

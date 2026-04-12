@@ -1,7 +1,11 @@
 /* ══════════════════════════════════════════════
-   ECLIPSE CINEMA — detail.js
+   ECLIPSE CINEMA — detail.js  (FIXED)
    Trang chi tiết phim: hero, tabs, cast, media, reviews
    Phụ thuộc: config.js → api.js → auth.js
+
+   CHANGES:
+   [Fix #4] toggleWatchlist / toggleFavorite disable nút trong khi xử lý
+   [Fix #2] Storage user-aware xử lý ở config.js, không cần sửa ở đây
 ══════════════════════════════════════════════ */
 
 // ─── Alias ngắn ───────────────────────────────
@@ -15,16 +19,12 @@ const year     = releaseYear;
    STATE
 ────────────────────────────────────────────── */
 const state = {
-  movieId:   null,   // ID phim từ URL ?id=...
-  movie:     null,   // Dữ liệu phim chính
-  credits:   null,   // Cast & crew
-  images:    null,   // Backdrops & posters
-  mediaType: "backdrops", // Tab media đang active
-
-  // Lightbox gallery
-  lightbox: { images: [], index: 0 },
-
-  // Watchlist/Favorites từ localStorage
+  movieId:   null,
+  movie:     null,
+  credits:   null,
+  images:    null,
+  mediaType: "backdrops",
+  lightbox:  { images: [], index: 0 },
   watchlist: Storage.get("cineverse_watchlist"),
   favorites: Storage.get("cineverse_favorites"),
 };
@@ -32,6 +32,10 @@ const state = {
 /* ══════════════════════════════════════════════
    NAVBAR
 ══════════════════════════════════════════════ */
+
+/**
+ * Khởi tạo navbar cho trang detail: scroll effect, hamburger menu, user dropdown
+ */
 function initNavbar() {
   const navbar    = document.getElementById("navbar");
   const hamburger = document.getElementById("hamburger");
@@ -50,8 +54,7 @@ function initNavbar() {
     const open = navLinks.classList.contains("open");
     hamburger.querySelectorAll("span").forEach((s, i) => {
       s.style.transform = open
-        ? ["translateY(7px) rotate(45deg)", "", "translateY(-7px) rotate(-45deg)"][i]
-        : "";
+        ? ["translateY(7px) rotate(45deg)", "", "translateY(-7px) rotate(-45deg)"][i] : "";
       if (i === 1) s.style.opacity = open ? "0" : "";
     });
   });
@@ -66,7 +69,6 @@ function initNavbar() {
     document.getElementById("searchResults")?.classList.remove("open");
   });
 
-  // Dropdown Genre mobile toggle
   document.querySelectorAll(".dropdown-toggle").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       if (window.innerWidth <= 768) {
@@ -125,7 +127,7 @@ async function doSearch(query) {
 }
 
 /* ══════════════════════════════════════════════
-   GENRES DROPDOWN (navbar)
+   GENRES DROPDOWN
 ══════════════════════════════════════════════ */
 async function loadGenres() {
   const data = await tmdb("/genre/movie/list");
@@ -137,8 +139,6 @@ async function loadGenres() {
 
 /* ══════════════════════════════════════════════
    HERO SECTION
-   Render backdrop, poster, score ring, thông tin phim,
-   và các nút action (trailer, watchlist, favorite, share)
 ══════════════════════════════════════════════ */
 function renderHero(movie, credits) {
   document.title = `${movie.title} – ${ECLIPSE_CONFIG.APP_NAME}`;
@@ -154,7 +154,7 @@ function renderHero(movie, credits) {
     const img = document.createElement("img");
     img.src   = backdrop(movie.backdrop_path);
     img.alt   = movie.title;
-    img.onload = () => bdWrap.classList.add("loaded"); // trigger CSS zoom-out
+    img.onload = () => bdWrap.classList.add("loaded");
     bdWrap.innerHTML = "";
     bdWrap.appendChild(img);
   } else {
@@ -165,22 +165,19 @@ function renderHero(movie, credits) {
   document.getElementById("detailPoster").innerHTML =
     `<img src="${poster(movie.poster_path, ECLIPSE_CONFIG.POSTER_LG)}" alt="${movie.title}" loading="eager" />`;
 
-  // ── Score Ring (SVG circle stroke animation) ──
-  const circumference = 2 * Math.PI * 18; // r=18
-  const scoreRing     = document.getElementById("detailScoreRing");
-  const fillCircle    = document.getElementById("scoreFillCircle");
+  // ── Score Ring ──
+  const circumference = 2 * Math.PI * 18;
+  const scoreRing  = document.getElementById("detailScoreRing");
+  const fillCircle = document.getElementById("scoreFillCircle");
 
   scoreRing.style.display = "flex";
   document.getElementById("scoreText").textContent = score.toFixed(1);
 
-  // Set dasharray trước, sau đó dùng rAF để trigger CSS transition
   fillCircle.style.strokeDasharray  = circumference;
-  fillCircle.style.strokeDashoffset = circumference; // bắt đầu ở 0%
+  fillCircle.style.strokeDashoffset = circumference;
   requestAnimationFrame(() => setTimeout(() => {
     fillCircle.style.strokeDashoffset = circumference - (score / 10) * circumference;
   }, 100));
-
-  // Màu vòng tròn theo điểm
   fillCircle.classList.add(score >= 7 ? "high" : score >= 5 ? "mid" : "low");
 
   // ── Info ──
@@ -232,7 +229,6 @@ function renderHero(movie, credits) {
     <p class="detail-hero-overview">${movie.overview || "Chưa có mô tả tiếng Việt."}</p>
 
     <div class="detail-hero-actions">
-      <!-- Trailer button: hiện sau khi renderTrailer() được gọi -->
       <button class="btn-primary" id="heroTrailerBtn" style="display:none;
         background:rgba(255,255,255,0.12);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.2)">
         <i class="fab fa-youtube"></i> Xem Trailer
@@ -253,7 +249,6 @@ function renderHero(movie, credits) {
       </button>
     </div>`;
 
-  // Fade-in animation cho khối info
   const infoEl = document.getElementById("detailInfo");
   Object.assign(infoEl.style, { opacity: "0", transform: "translateY(24px)", transition: "opacity 0.7s ease 0.2s, transform 0.7s ease 0.2s" });
   requestAnimationFrame(() => Object.assign(infoEl.style, { opacity: "1", transform: "translateY(0)" }));
@@ -261,14 +256,11 @@ function renderHero(movie, credits) {
 
 /* ══════════════════════════════════════════════
    TAB: OVERVIEW
-   Tagline, synopsis, trailer embed, cast preview,
-   sidebar thông tin/thể loại/production/keywords
 ══════════════════════════════════════════════ */
 function renderOverview(movie) {
-  // Tagline (chỉ hiện nếu có)
   const taglineEl = document.getElementById("detailTagline");
   if (movie.tagline) {
-    taglineEl.textContent  = movie.tagline;
+    taglineEl.textContent   = movie.tagline;
     taglineEl.style.display = "block";
   } else {
     taglineEl.style.display = "none";
@@ -277,8 +269,6 @@ function renderOverview(movie) {
   document.getElementById("detailOverview").textContent =
     movie.overview || "Chưa có mô tả tiếng Việt.";
 
-  // ── Stats sidebar ──
-  // Tính lợi nhuận nếu có đủ budget + revenue
   const profit = (movie.revenue && movie.budget) ? movie.revenue - movie.budget : null;
 
   const statsRows = [
@@ -299,12 +289,10 @@ function renderOverview(movie) {
       <span class="stat-value ${cls}">${value}</span>
     </li>`).join("");
 
-  // ── Genres ──
   document.getElementById("detailGenres").innerHTML = movie.genres?.length
     ? movie.genres.map((g) => `<span class="genre-chip">${g.name}</span>`).join("")
     : `<span style="color:var(--grey);font-size:13px">Chưa có thể loại</span>`;
 
-  // ── Production companies ──
   const prodCard = document.getElementById("productionCard");
   if (movie.production_companies?.length) {
     prodCard.style.display = "block";
@@ -328,15 +316,12 @@ function renderOverview(movie) {
 
 /* ══════════════════════════════════════════════
    TRAILER
-   Tìm trailer YouTube, bind nút hero + show embed card
 ══════════════════════════════════════════════ */
 function renderTrailer(videos) {
-  // Ưu tiên trailer chính thức, fallback bất kỳ video YouTube
   const trailer = videos?.results?.find((v) => v.type === "Trailer" && v.site === "YouTube")
                || videos?.results?.find((v) => v.site === "YouTube");
   if (!trailer) return;
 
-  // Hero button → scroll đến trailer card
   const heroBtn = document.getElementById("heroTrailerBtn");
   if (heroBtn) {
     heroBtn.style.display = "inline-flex";
@@ -346,7 +331,6 @@ function renderTrailer(videos) {
     };
   }
 
-  // Hiện trailer embed
   document.getElementById("trailerCard").style.display = "block";
   document.getElementById("trailerFrame").src =
     `https://www.youtube.com/embed/${trailer.key}?rel=0&modestbranding=1`;
@@ -354,8 +338,6 @@ function renderTrailer(videos) {
 
 /* ══════════════════════════════════════════════
    TAB: CAST & CREW
-   Preview 6 diễn viên ở Overview, full list ở tab Cast
-   Key jobs lọc crew: đạo diễn, nhà sản xuất, quay phim...
 ══════════════════════════════════════════════ */
 function renderCast(credits) {
   if (!credits) return;
@@ -364,7 +346,6 @@ function renderCast(credits) {
   const crew = credits.crew || [];
   const noImg = "https://via.placeholder.com/185x278/161616/888?text=N%2FA";
 
-  // Template card diễn viên
   const castCard = (a) => `
     <div class="cast-card">
       <div class="cast-photo">
@@ -375,17 +356,14 @@ function renderCast(credits) {
       <div class="cast-character">${a.character || ""}</div>
     </div>`;
 
-  // Preview trong tab Overview (6 người)
   document.getElementById("castPreview").innerHTML = cast.length
     ? cast.slice(0, 6).map(castCard).join("")
     : `<p style="color:var(--grey);font-size:13px;grid-column:1/-1">Chưa có thông tin.</p>`;
 
-  // Full cast (30 người)
   document.getElementById("castFullGrid").innerHTML = cast.length
     ? cast.slice(0, 30).map(castCard).join("")
     : `<p style="color:var(--grey);font-size:13px">Chưa có thông tin diễn viên.</p>`;
 
-  // Crew — lọc theo các vai trò quan trọng, deduplicate theo id+job
   const KEY_JOBS = ["Director", "Producer", "Executive Producer", "Screenplay", "Story",
                     "Director of Photography", "Original Music Composer", "Editor"];
   const filteredCrew = crew
@@ -419,9 +397,7 @@ function renderKeywords(keywords) {
 }
 
 /* ══════════════════════════════════════════════
-   TAB: MEDIA (Gallery)
-   Hai loại: backdrops (ảnh cảnh phim) & posters
-   Click → mở lightbox
+   TAB: MEDIA
 ══════════════════════════════════════════════ */
 function renderMedia(type = "backdrops") {
   const items   = state.images?.[type] || [];
@@ -433,7 +409,6 @@ function renderMedia(type = "backdrops") {
     return;
   }
 
-  // Lưu danh sách URL full-size cho lightbox
   state.lightbox.images = items.slice(0, 24).map((img) => imgUrl(img.file_path, "original"));
 
   grid.innerHTML = items.slice(0, 24).map((img, i) => `
@@ -443,7 +418,6 @@ function renderMedia(type = "backdrops") {
     </div>`).join("");
 }
 
-// Filter tab (Cảnh Phim / Poster) trong tab Media
 document.getElementById("mediaFilter")?.addEventListener("click", (e) => {
   const tab = e.target.closest(".filter-tab");
   if (!tab) return;
@@ -455,12 +429,10 @@ document.getElementById("mediaFilter")?.addEventListener("click", (e) => {
 
 /* ══════════════════════════════════════════════
    TAB: REVIEWS
-   Danh sách review + sidebar tổng hợp điểm
 ══════════════════════════════════════════════ */
 function renderReviews(reviews, movie) {
   const score = movie.vote_average;
 
-  // Score summary sidebar
   document.getElementById("scoreSummary").innerHTML = `
     <div class="score-big">${score.toFixed(1)}</div>
     <div class="score-stars-big">${starRating(score)}</div>
@@ -489,7 +461,7 @@ function renderReviews(reviews, movie) {
 
   document.getElementById("reviewsList").innerHTML = results.slice(0, 10).map((r, idx) => {
     const rating = r.author_details?.rating || null;
-    const isLong = (r.content || "").length > 400; // collapse review dài
+    const isLong = (r.content || "").length > 400;
 
     return `
       <div class="review-card">
@@ -513,7 +485,6 @@ function renderReviews(reviews, movie) {
   }).join("");
 }
 
-/** Toggle collapsed/expanded cho review dài */
 function toggleReview(idx, btn) {
   const body = document.getElementById(`review-body-${idx}`);
   body.classList.toggle("collapsed");
@@ -524,7 +495,6 @@ function toggleReview(idx, btn) {
 
 /* ══════════════════════════════════════════════
    SIMILAR MOVIES
-   Section bên dưới trang, hiện khi có kết quả
 ══════════════════════════════════════════════ */
 function renderSimilar(similar) {
   const movies = similar?.results?.filter((m) => m.poster_path)?.slice(0, 12);
@@ -547,7 +517,6 @@ function renderSimilar(similar) {
       </div>
     </div>`).join("");
 
-  // Stagger animation cho similar cards
   Array.from(grid.children).forEach((card, i) => {
     Object.assign(card.style, {
       opacity:    "0",
@@ -560,15 +529,11 @@ function renderSimilar(similar) {
 
 /* ══════════════════════════════════════════════
    TABS SYSTEM
-   Chuyển giữa Overview / Cast / Media / Reviews
-   Hỗ trợ scrollToTab() để cuộn đến tabs bar
 ══════════════════════════════════════════════ */
 function initTabs() {
-  // Click tab button
   document.querySelectorAll(".detail-tab").forEach((btn) =>
     btn.addEventListener("click", () => switchTab(btn.dataset.tab))
   );
-  // "Xem Tất Cả" links trong tab Overview → chuyển sang tab Cast
   document.querySelectorAll(".tab-switch-btn").forEach((btn) =>
     btn.addEventListener("click", () => btn.dataset.goto && scrollToTab(btn.dataset.goto))
   );
@@ -580,7 +545,6 @@ function switchTab(tabId) {
   document.querySelector(`.detail-tab[data-tab="${tabId}"]`)?.classList.add("active");
   document.getElementById(`tab-${tabId}`)?.classList.add("active");
 
-  // Lazy render Media tab (chỉ render khi user click vào lần đầu)
   if (tabId === "media" && !document.getElementById("mediaGrid").children.length) {
     renderMedia(state.mediaType);
   }
@@ -596,23 +560,57 @@ function scrollToTab(tabId) {
 }
 
 /* ══════════════════════════════════════════════
-   WATCHLIST & FAVORITES
+   WATCHLIST & FAVORITES  (FIX #4)
+   ─────────────────────────────────────────────
+   Nút được disable trong 200ms sau khi bấm để:
+   - Tránh double-click gây toggle 2 lần liên tiếp
+   - Thể hiện phản hồi tức thì cho người dùng (opacity mờ)
 ══════════════════════════════════════════════ */
+
+/**
+ * [FIX #4] Helper: disable nút → chạy callback → re-enable
+ * @param {HTMLElement} btn   - Nút cần lock
+ * @param {Function}    fn    - Logic thực thi sau khi lock
+ * @param {number}      delay - ms để giả lập "xử lý" (mặc định 200)
+ */
+function _withButtonLock(btn, fn, delay = 200) {
+  if (!btn || btn.disabled) return; // đã đang lock → bỏ qua
+  btn.disabled = true;
+  btn.style.opacity = "0.5";
+  btn.style.transform = "scale(0.92)";
+
+  setTimeout(() => {
+    fn(); // thực thi logic chính
+    btn.disabled = false;
+    btn.style.opacity = "";
+    btn.style.transform = "";
+  }, delay);
+}
+
 function toggleWatchlist(id, title) {
-  const added = Storage.toggle("cineverse_watchlist", id);
-  state.watchlist = Storage.get("cineverse_watchlist");
-  showToast(added ? `🔖 Đã thêm "${title}" vào xem sau` : `✖ Đã xóa "${title}" khỏi xem sau`);
-  document.getElementById("watchlistBtn")?.classList.toggle("active-red", added);
+  const btn = document.getElementById("watchlistBtn");
+
+  _withButtonLock(btn, () => {
+    const added = Storage.toggle("cineverse_watchlist", id);
+    state.watchlist = Storage.get("cineverse_watchlist");
+    showToast(added ? `🔖 Đã thêm "${title}" vào xem sau` : `✖ Đã xóa "${title}" khỏi xem sau`);
+    btn?.classList.toggle("active-red", added);
+    btn && (btn.title = added ? "Bỏ xem sau" : "Xem Sau");
+  });
 }
 
 function toggleFavorite(id, title) {
-  const added = Storage.toggle("cineverse_favorites", id);
-  state.favorites = Storage.get("cineverse_favorites");
-  showToast(added ? `❤️ Đã thêm "${title}" vào yêu thích` : `✖ Đã xóa "${title}" khỏi yêu thích`);
-  document.getElementById("favoriteBtn")?.classList.toggle("active-gold", added);
+  const btn = document.getElementById("favoriteBtn");
+
+  _withButtonLock(btn, () => {
+    const added = Storage.toggle("cineverse_favorites", id);
+    state.favorites = Storage.get("cineverse_favorites");
+    showToast(added ? `❤️ Đã thêm "${title}" vào yêu thích` : `✖ Đã xóa "${title}" khỏi yêu thích`);
+    btn?.classList.toggle("active-gold", added);
+    btn && (btn.title = added ? "Bỏ yêu thích" : "Yêu thích");
+  });
 }
 
-/** Share URL bằng Web Share API, fallback copy clipboard */
 function shareMovie() {
   if (navigator.share) {
     navigator.share({ title: document.title, url: location.href }).catch(() => {});
@@ -623,7 +621,6 @@ function shareMovie() {
 
 /* ══════════════════════════════════════════════
    LIGHTBOX
-   Full-screen gallery với prev/next và keyboard nav
 ══════════════════════════════════════════════ */
 function openLightbox(index) {
   state.lightbox.index = index;
@@ -631,7 +628,7 @@ function openLightbox(index) {
   document.getElementById("lightboxCounter").textContent =
     `${index + 1} / ${state.lightbox.images.length}`;
   document.getElementById("lightbox").classList.add("open");
-  document.body.style.overflow = "hidden"; // khóa scroll trang
+  document.body.style.overflow = "hidden";
 }
 
 function closeLightbox() {
@@ -644,15 +641,13 @@ function lightboxNav(dir) {
   openLightbox((state.lightbox.index + dir + total) % total);
 }
 
-// Bind lightbox controls
 document.getElementById("lightboxClose")?.addEventListener("click", closeLightbox);
 document.getElementById("lightboxPrev")?.addEventListener("click", () => lightboxNav(-1));
 document.getElementById("lightboxNext")?.addEventListener("click", () => lightboxNav(1));
 document.getElementById("lightbox")?.addEventListener("click", (e) => {
-  if (e.target === e.currentTarget) closeLightbox(); // click ngoài ảnh → đóng
+  if (e.target === e.currentTarget) closeLightbox();
 });
 
-// Keyboard navigation
 document.addEventListener("keydown", (e) => {
   if (!document.getElementById("lightbox")?.classList.contains("open")) return;
   if (e.key === "Escape")     closeLightbox();
@@ -661,7 +656,7 @@ document.addEventListener("keydown", (e) => {
 });
 
 /* ══════════════════════════════════════════════
-   BACK TO TOP BUTTON
+   BACK TO TOP
 ══════════════════════════════════════════════ */
 function initBackToTop() {
   const btn = document.getElementById("backToTop");
@@ -671,7 +666,6 @@ function initBackToTop() {
 
 /* ══════════════════════════════════════════════
    ERROR STATE
-   Hiện khi không tìm thấy phim (ID sai / API lỗi)
 ══════════════════════════════════════════════ */
 function showError() {
   document.getElementById("detailHero").innerHTML = `
@@ -687,40 +681,35 @@ function showError() {
 }
 
 /* ══════════════════════════════════════════════
-   INIT — chạy khi DOM ready
-   Gọi 7 API song song bằng Promise.all để tối ưu tốc độ
+   INIT
 ══════════════════════════════════════════════ */
 async function init() {
   initNavbar();
   initSearch();
   initTabs();
   initBackToTop();
-  loadGenres(); // không await, load ngầm
+  loadGenres();
 
-  // Đọc movie ID từ query string ?id=123
   const id = new URLSearchParams(location.search).get("id");
   if (!id) { showError(); return; }
   state.movieId = parseInt(id, 10);
 
-  // Fetch song song tất cả dữ liệu cần thiết
   const [movie, credits, videos, images, reviews, similar, keywords] = await Promise.all([
-    tmdb(`/movie/${id}`),                                          // Chi tiết phim
-    tmdb(`/movie/${id}/credits`),                                  // Cast & crew
-    tmdb(`/movie/${id}/videos`),                                   // Trailer
-    tmdb(`/movie/${id}/images`, { include_image_language: "null,en" }), // Backdrops & posters
-    tmdb(`/movie/${id}/reviews`),                                  // Đánh giá TMDB
-    tmdb(`/movie/${id}/similar`),                                  // Phim tương tự
-    tmdb(`/movie/${id}/keywords`),                                 // Keywords
+    tmdb(`/movie/${id}`),
+    tmdb(`/movie/${id}/credits`),
+    tmdb(`/movie/${id}/videos`),
+    tmdb(`/movie/${id}/images`, { include_image_language: "null,en" }),
+    tmdb(`/movie/${id}/reviews`),
+    tmdb(`/movie/${id}/similar`),
+    tmdb(`/movie/${id}/keywords`),
   ]);
 
   if (!movie) { showError(); return; }
 
-  // Lưu vào state để dùng ở các hàm khác (renderMedia, v.v.)
   state.movie   = movie;
   state.credits = credits;
   state.images  = images;
 
-  // Render tuần tự (các hàm này đồng bộ, rất nhanh)
   renderHero(movie, credits);
   renderOverview(movie);
   renderTrailer(videos);

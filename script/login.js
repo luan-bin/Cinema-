@@ -51,6 +51,9 @@
      Slide giữa Login ↔ Register + cập nhật deco strip
   ────────────────────────────────────────── */
 
+  /**
+   * Chuyển sang panel đăng ký
+   */
   function showRegister() {
     if (isRegister) return;
     isRegister = true;
@@ -59,6 +62,9 @@
     _updateDecoMsg(/* isRegister */ true);
   }
 
+  /**
+   * Chuyển sang panel đăng nhập
+   */
   function showLogin() {
     if (!isRegister) return;
     isRegister = false;

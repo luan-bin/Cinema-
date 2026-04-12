@@ -1,7 +1,12 @@
 /* ══════════════════════════════════════════════
-   ECLIPSE CINEMA — home.js
+   ECLIPSE CINEMA — home.js  (FIXED)
    Trang chủ: hero carousel, các section phim, ticker
    Phụ thuộc: config.js → api.js → auth.js
+
+   CHANGES:
+   [Fix #1] Movie cards hiện nút bookmark phản chiếu trạng thái WL thực tế
+   [Fix #4] Nút toggle bị disable trong 200ms để tránh double-click
+   [Fix #2] Storage tự động dùng user-key (xử lý ở config.js)
 ══════════════════════════════════════════════ */
 
 // ─── Alias ngắn ───────────────────────────────
@@ -14,22 +19,62 @@ const year     = releaseYear;
    STATE
 ────────────────────────────────────────────── */
 const state = {
-  heroMovies: [],  // Danh sách phim trending dùng cho hero carousel
-  heroIndex:  0,   // Slide đang hiển thị
-  heroTimer:  null, // setTimeout handle để reset autoplay
-
-  // Lấy danh sách watchlist/favorites từ localStorage
+  heroMovies: [],
+  heroIndex:  0,
+  heroTimer:  null,
   watchlist:  Storage.get("cineverse_watchlist"),
   favorites:  Storage.get("cineverse_favorites"),
 };
 
 /* ══════════════════════════════════════════════
-   NAVBAR
-   - Scroll effect: transparent → frosted glass
-   - Hamburger mobile toggle
-   - User dropdown
-   - Smooth scroll cho anchor links (#section)
+   [FIX #1] INJECT CSS cho card bookmark button
+   Thêm vào <head> một lần duy nhất khi init
 ══════════════════════════════════════════════ */
+function injectCardStyles() {
+  if (document.getElementById("eclipse-card-styles")) return;
+  const style = document.createElement("style");
+  style.id = "eclipse-card-styles";
+  style.textContent = `
+    /* ── Bookmark button trên mỗi movie card ── */
+    .card-wl-btn {
+      position: absolute;
+      top: 8px; right: 8px;
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(6px);
+      color: #888;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
+      transition: opacity 0.2s ease, transform 0.2s ease, color 0.2s ease, background 0.2s ease;
+      z-index: 3;
+      opacity: 0;          /* ẩn mặc định, hiện khi hover card */
+    }
+    .movie-card:hover .card-wl-btn { opacity: 1; }
+    .card-wl-btn.active            { color: #e50914; opacity: 1; }  /* đã lưu → luôn hiện, đỏ */
+    .card-wl-btn:hover:not(:disabled) { transform: scale(1.15); background: rgba(0,0,0,0.9); }
+    .card-wl-btn:disabled          { cursor: not-allowed; opacity: 0.4 !important; }
+
+    /* ── Hero "Xem Sau" active state ── */
+    .hero-actions .btn-secondary.wl-active {
+      background: rgba(229,9,20,0.25);
+      border-color: #e50914;
+      color: #e50914;
+    }
+    .hero-actions .btn-secondary.wl-active i { color: #e50914; }
+  `;
+  document.head.appendChild(style);
+}
+
+/* ══════════════════════════════════════════════
+   NAVBAR
+══════════════════════════════════════════════ */
+
+/**
+ * Khởi tạo navbar: scroll effect, hamburger menu, user dropdown
+ */
 function initNavbar() {
   const navbar    = document.getElementById("navbar");
   const hamburger = document.getElementById("hamburger");
@@ -38,30 +83,25 @@ function initNavbar() {
   const userDD    = document.getElementById("userDropdown");
   if (!navbar) return;
 
-  // Chuyển navbar sang "scrolled" (có backdrop-filter) khi cuộn > 60px
   window.addEventListener("scroll", () =>
     navbar.classList.toggle("scrolled", window.scrollY > 60)
   );
 
-  // Hamburger (mobile): toggle menu + animate icon → X
   hamburger?.addEventListener("click", () => {
     navLinks.classList.toggle("open");
     const open = navLinks.classList.contains("open");
     hamburger.querySelectorAll("span").forEach((s, i) => {
       s.style.transform = open
-        ? ["translateY(7px) rotate(45deg)", "", "translateY(-7px) rotate(-45deg)"][i]
-        : "";
+        ? ["translateY(7px) rotate(45deg)", "", "translateY(-7px) rotate(-45deg)"][i] : "";
       if (i === 1) s.style.opacity = open ? "0" : "";
     });
   });
 
-  // User dropdown toggle
   avatarBtn?.addEventListener("click", (e) => {
     e.stopPropagation();
     userDD.classList.toggle("open");
   });
 
-  // Dropdown Genre (mobile: toggle thay vì hover)
   document.querySelectorAll(".dropdown-toggle").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       if (window.innerWidth <= 768) {
@@ -71,19 +111,16 @@ function initNavbar() {
     });
   });
 
-  // Click ngoài → đóng tất cả dropdown
   document.addEventListener("click", () => {
     userDD?.classList.remove("open");
     document.getElementById("searchResults")?.classList.remove("open");
   });
 
-  // Smooth scroll cho các nav-link kiểu #section-id
   document.querySelectorAll(".nav-link[href^='#']").forEach((link) => {
     link.addEventListener("click", (e) => {
       e.preventDefault();
       document.querySelector(link.getAttribute("href"))?.scrollIntoView({ behavior: "smooth" });
       navLinks.classList.remove("open");
-      // Cập nhật active state
       document.querySelectorAll(".nav-link").forEach((l) => l.classList.remove("active"));
       link.classList.add("active");
     });
@@ -92,9 +129,12 @@ function initNavbar() {
 
 /* ══════════════════════════════════════════════
    AUTH NAVBAR
-   Nếu đã đăng nhập → hiện initials + tên
-   Ngược lại → hiện link Đăng Nhập / Đăng Ký
 ══════════════════════════════════════════════ */
+
+/**
+ * Khởi tạo navbar cho user đã đăng nhập: hiển thị avatar, tên, logout
+ * Nếu chưa đăng nhập, hiển thị link đăng nhập/đăng ký
+ */
 function initAuthNavbar() {
   if (!window.CinemaAuth) return;
   const session = CinemaAuth.getSession();
@@ -118,12 +158,6 @@ function initAuthNavbar() {
       setTimeout(() => (window.location.href = "login.html"), 1200);
     });
   } else {
-    document.querySelector(".user-name")?.setAttribute("textContent", "Khách");
-    document.querySelector(".user-email")?.setAttribute("textContent", "Chưa đăng nhập");
-    document.querySelector(".user-menu-list")?.insertAdjacentHTML("afterbegin", `
-      <li><a href="login.html" style="color:var(--red)!important"><i class="fas fa-sign-in-alt"></i> Đăng Nhập</a></li>
-      <li><a href="login.html"><i class="fas fa-user-plus"></i> Đăng Ký</a></li>`);
-    // Xóa các item cũ và chỉ giữ 2 link mới
     const list = document.querySelector(".user-menu-list");
     if (list) {
       list.innerHTML = `
@@ -135,9 +169,11 @@ function initAuthNavbar() {
 
 /* ══════════════════════════════════════════════
    SEARCH
-   - Debounce 400ms khi gõ
-   - Hiện dropdown kết quả (max 7 phim)
 ══════════════════════════════════════════════ */
+
+/**
+ * Khởi tạo search box: toggle, input handler, debounce search
+ */
 function initSearch() {
   const btn     = document.getElementById("searchBtn");
   const input   = document.getElementById("searchInput");
@@ -184,8 +220,6 @@ async function doSearch(query) {
 
 /* ══════════════════════════════════════════════
    GENRE DROPDOWN
-   Tải thể loại từ TMDB, inject vào dropdown grid
-   Click → filter section Popular theo genre
 ══════════════════════════════════════════════ */
 async function loadGenres() {
   const genreContainer = document.getElementById("genreList");
@@ -199,7 +233,6 @@ async function loadGenres() {
   ).join("");
 }
 
-/** Lọc Popular grid theo genre khi click trong dropdown */
 async function filterByGenre(id, name) {
   showToast(`🎬 Đang lọc: ${name}`);
   const data = await tmdb("/discover/movie", { with_genres: id, sort_by: "popularity.desc" });
@@ -208,15 +241,12 @@ async function filterByGenre(id, name) {
 
 /* ══════════════════════════════════════════════
    HERO CAROUSEL
-   - Tải 8 phim trending tuần này
-   - Auto-play mỗi 6 giây
-   - Điều hướng bằng nút prev/next và dot indicators
+   [FIX #1] Nút "Xem Sau" có class wl-active nếu phim đã trong WL
 ══════════════════════════════════════════════ */
 async function loadHero() {
   const data = await tmdb("/trending/movie/week");
   if (!data) return;
 
-  // Chỉ dùng phim có backdrop, lấy tối đa 8
   state.heroMovies = data.results.filter((m) => m.backdrop_path).slice(0, 8);
   renderHeroSlides();
   startHeroAutoplay();
@@ -226,7 +256,11 @@ function renderHeroSlides() {
   const carousel   = document.getElementById("heroCarousel");
   const indicators = document.getElementById("heroIndicators");
 
-  carousel.innerHTML = state.heroMovies.map((m, i) => `
+  carousel.innerHTML = state.heroMovies.map((m, i) => {
+    // [FIX #1] Kiểm tra watchlist để đặt class active ngay khi render
+    const inWL = Storage.has("cineverse_watchlist", m.id);
+
+    return `
     <div class="hero-slide ${i === 0 ? "active" : ""}" data-index="${i}">
       <div class="hero-bg">
         <img src="${backdrop(m.backdrop_path)}" alt="${m.title}"
@@ -249,26 +283,28 @@ function renderHeroSlides() {
           <button class="btn-primary" onclick="location.href='detail.html?id=${m.id}'">
             <i class="fas fa-info-circle"></i> Xem Chi Tiết
           </button>
-          <button class="btn-secondary" onclick="toggleWatchlist(${m.id},'${escapeTitle(m.title)}')">
-            <i class="fas fa-bookmark"></i> Xem Sau
+          <!-- [FIX #1] data-movieid để toggleWatchlist tìm và cập nhật nút -->
+          <button class="btn-secondary ${inWL ? "wl-active" : ""}"
+            data-hero-wl="${m.id}"
+            title="${inWL ? "Bỏ xem sau" : "Xem sau"}"
+            onclick="toggleWatchlist(${m.id},'${escapeTitle(m.title)}')">
+            <i class="fas fa-bookmark"></i> ${inWL ? "Đã Lưu" : "Xem Sau"}
           </button>
         </div>
       </div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 
-  // Dot indicators
   indicators.innerHTML = state.heroMovies.map((_, i) =>
     `<div class="hero-dot ${i === 0 ? "active" : ""}" onclick="goToSlide(${i})"></div>`
   ).join("");
 
-  // Prev / Next buttons
   document.getElementById("heroPrev").onclick = () =>
     goToSlide((state.heroIndex - 1 + state.heroMovies.length) % state.heroMovies.length);
   document.getElementById("heroNext").onclick = () =>
     goToSlide((state.heroIndex + 1) % state.heroMovies.length);
 }
 
-/** Chuyển sang slide thứ n (reset autoplay) */
 function goToSlide(n) {
   document.querySelectorAll(".hero-slide").forEach((s) => s.classList.remove("active"));
   document.querySelectorAll(".hero-dot").forEach((d)   => d.classList.remove("active"));
@@ -279,7 +315,6 @@ function goToSlide(n) {
   startHeroAutoplay();
 }
 
-/** Tự động chuyển slide mỗi 6 giây */
 function startHeroAutoplay() {
   state.heroTimer = setTimeout(
     () => goToSlide((state.heroIndex + 1) % state.heroMovies.length),
@@ -289,8 +324,6 @@ function startHeroAutoplay() {
 
 /* ══════════════════════════════════════════════
    TRENDING TICKER
-   Phim đang chiếu chạy ngang bên dưới hero
-   Animation CSS (ticker-track) nhân đôi để loop mượt
 ══════════════════════════════════════════════ */
 async function loadTicker() {
   const data = await tmdb("/movie/now_playing", { region: ECLIPSE_CONFIG.REGION });
@@ -302,26 +335,17 @@ async function loadTicker() {
      </div>`
   ).join("");
 
-  // Nhân đôi nội dung để CSS animation loop liền mạch
   document.getElementById("tickerTrack").innerHTML = items + items;
 }
 
 /* ══════════════════════════════════════════════
-   CÁC SECTION PHIM
+   SECTIONS
 ══════════════════════════════════════════════ */
-
-/** Now Playing (phim đang chiếu tại rạp) */
 async function loadNowPlaying() {
   const data = await tmdb("/movie/now_playing", { region: ECLIPSE_CONFIG.REGION });
   if (data) renderMovieCards(document.getElementById("nowPlayingRow"), data.results.slice(0, 10));
 }
 
-/**
- * Popular/Trending — 3 chế độ:
- * - "all"  → /movie/popular
- * - "week" → /trending/movie/week
- * - "day"  → /trending/movie/day
- */
 async function loadPopular(type = "all") {
   const endpointMap = {
     day:  "/trending/movie/day",
@@ -332,7 +356,6 @@ async function loadPopular(type = "all") {
   if (data) renderMovieCards(document.getElementById("popularGrid"), data.results.slice(0, 12));
 }
 
-/** Upcoming — danh sách phim sắp chiếu (layout dọc) */
 async function loadUpcoming() {
   const data = await tmdb("/movie/upcoming", { region: ECLIPSE_CONFIG.REGION });
   if (!data) return;
@@ -348,7 +371,6 @@ async function loadUpcoming() {
     </div>`).join("");
 }
 
-/** Top Rated — layout grid với backdrop + số thứ tự */
 async function loadTopRated() {
   const data = await tmdb("/movie/top_rated");
   if (!data) return;
@@ -364,7 +386,6 @@ async function loadTopRated() {
     </div>`).join("");
 }
 
-// Popular filter tabs (Tất Cả / Tuần Này / Hôm Nay)
 document.getElementById("popularFilter")?.addEventListener("click", (e) => {
   const tab = e.target.closest(".filter-tab");
   if (!tab) return;
@@ -375,12 +396,16 @@ document.getElementById("popularFilter")?.addEventListener("click", (e) => {
 
 /* ══════════════════════════════════════════════
    RENDER HELPERS
+   Mỗi card có nút bookmark nhỏ ở góc, phản chiếu trạng thái WL
 ══════════════════════════════════════════════ */
-
-/** Render lưới movie cards vào container */
 function renderMovieCards(container, movies) {
   if (!container) return;
-  container.innerHTML = movies.map((m) => `
+
+  container.innerHTML = movies.map((m) => {
+    // Đọc trạng thái watchlist hiện tại
+    const inWL = Storage.has("cineverse_watchlist", m.id);
+
+    return `
     <div class="movie-card" onclick="location.href='detail.html?id=${m.id}'">
       <div class="movie-poster">
         <img src="${poster(m.poster_path)}" alt="${m.title}" loading="lazy"
@@ -389,6 +414,14 @@ function renderMovieCards(container, movies) {
           <div class="play-btn"><i class="fas fa-play"></i></div>
         </div>
         <div class="movie-rating-badge">⭐ ${m.vote_average.toFixed(1)}</div>
+
+        <!-- Bookmark button: active (đỏ) nếu đã trong watchlist -->
+        <button
+          class="card-wl-btn ${inWL ? "active" : ""}"
+          title="${inWL ? "Bỏ xem sau" : "Xem sau"}"
+          onclick="event.stopPropagation(); toggleWatchlistCard(${m.id}, '${escapeTitle(m.title)}', this)">
+          <i class="fas fa-bookmark"></i>
+        </button>
       </div>
       <div class="movie-info">
         <p class="movie-title">${m.title}</p>
@@ -396,10 +429,10 @@ function renderMovieCards(container, movies) {
           <span class="movie-year">${year(m.release_date)}</span>
         </div>
       </div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
 }
 
-/** Hiện skeleton cards trong lúc chờ API */
 function showSkeletons(containerId, count = 6) {
   const el = document.getElementById(containerId);
   if (el) el.innerHTML = Array(count).fill(`<div class="skeleton skeleton-card"></div>`).join("");
@@ -407,12 +440,40 @@ function showSkeletons(containerId, count = 6) {
 
 /* ══════════════════════════════════════════════
    WATCHLIST & FAVORITES
-   Toggle ID trong localStorage, hiện toast
 ══════════════════════════════════════════════ */
-function toggleWatchlist(id, title) {
-  const added = Storage.toggle("cineverse_watchlist", id);
-  state.watchlist = Storage.get("cineverse_watchlist");
-  showToast(added ? `🔖 Đã thêm "${title}" vào xem sau` : `✖ Đã xóa "${title}" khỏi xem sau`);
+
+/**
+ * Toggle watchlist từ nút bookmark trên movie card (grid).
+ */
+function toggleWatchlistCard(id, title, btn) {
+  if (btn.disabled) return;
+
+  // Disable ngay lập tức
+  btn.disabled = true;
+
+  setTimeout(() => {
+    const added = Storage.toggle("cineverse_watchlist", id);
+    state.watchlist = Storage.get("cineverse_watchlist");
+
+    // Cập nhật nút được bấm
+    btn.classList.toggle("active", added);
+    btn.title = added ? "Bỏ xem sau" : "Xem sau";
+    btn.disabled = false;
+
+    // Đồng bộ nút hero (nếu phim này đang hiển thị trên hero)
+    _syncHeroWatchlistBtn(id, added);
+
+    showToast(added ? `🔖 Đã thêm "${title}" vào xem sau` : `✖ Đã xóa "${title}" khỏi xem sau`);
+  }, 200);
+}
+
+/** [FIX #1] Đồng bộ trạng thái nút hero "Xem Sau" cho một movie ID */
+function _syncHeroWatchlistBtn(id, isAdded) {
+  const btn = document.querySelector(`[data-hero-wl="${id}"]`);
+  if (!btn) return;
+  btn.classList.toggle("wl-active", isAdded);
+  btn.title     = isAdded ? "Bỏ xem sau" : "Xem sau";
+  btn.innerHTML = `<i class="fas fa-bookmark"></i> ${isAdded ? "Đã Lưu" : "Xem Sau"}`;
 }
 
 function toggleFavorite(id, title) {
@@ -423,7 +484,6 @@ function toggleFavorite(id, title) {
 
 /* ══════════════════════════════════════════════
    SCROLL ANIMATIONS
-   IntersectionObserver: fade-in khi phần tử vào viewport
 ══════════════════════════════════════════════ */
 function initScrollAnimations() {
   const observer = new IntersectionObserver((entries) => {
@@ -431,22 +491,17 @@ function initScrollAnimations() {
       if (e.isIntersecting) {
         e.target.style.opacity   = "1";
         e.target.style.transform = "translateY(0)";
-        observer.unobserve(e.target); // chỉ animate 1 lần
+        observer.unobserve(e.target);
       }
     });
   }, { threshold: 0.1, rootMargin: "0px 0px -40px 0px" });
 
-  // Áp dụng cho các block header và banner
   document.querySelectorAll(".section-header, .promo-banner, .ticker-wrap").forEach((el) => {
     Object.assign(el.style, { opacity: "0", transform: "translateY(24px)", transition: "opacity 0.6s ease, transform 0.6s ease" });
     observer.observe(el);
   });
 }
 
-/**
- * Animate từng card trong container với stagger delay.
- * Gọi sau khi renderMovieCards() để có hiệu ứng xuất hiện.
- */
 function observeCards(containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -457,7 +512,6 @@ function observeCards(containerId) {
       transform:  "translateY(20px)",
       transition: `opacity 0.4s ease ${i * 0.06}s, transform 0.4s ease ${i * 0.06}s`,
     });
-    // setTimeout để tránh flash trước khi style được áp dụng
     setTimeout(() => {
       card.style.opacity   = "1";
       card.style.transform = "translateY(0)";
@@ -466,21 +520,20 @@ function observeCards(containerId) {
 }
 
 /* ══════════════════════════════════════════════
-   INIT — chạy khi DOM ready
-   Dùng Promise.all để tải song song các section
+   INIT
 ══════════════════════════════════════════════ */
 async function init() {
+  injectCardStyles(); // [FIX #1] Inject CSS cho card bookmark btn
+
   initNavbar();
   initAuthNavbar();
   initSearch();
   initScrollAnimations();
 
-  // Hiện skeleton sớm để tránh layout shift
   showSkeletons("nowPlayingRow", 8);
   showSkeletons("popularGrid", 12);
   showSkeletons("topRatedGrid", 10);
 
-  // Tải song song tất cả dữ liệu
   await Promise.all([
     loadGenres(),
     loadHero(),
